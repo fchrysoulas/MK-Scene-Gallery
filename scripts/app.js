@@ -40,8 +40,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "toggle-pin-folder": async function (event, target) {
         await this._togglePinnedFolder(event, target);
       },
-      "fit-bound-to-scene": async function (event, target) {
-        await this._fitBoundingTileToScene(event, target);
+      "fix-bounds": async function (event, target) {
+        await this._fixSceneBounds(event, target);
       },
       "clear-search": async function () {
         this._clearSearch();
@@ -275,6 +275,48 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     };
   }
 
+  _getLockViewBoundingMode(drawing) {
+    const flags = drawing?.flags?.LockView ?? drawing?.flags?.lockview;
+    const mode = flags?.boundingBox;
+    if (mode === "always" || mode === "owned") return mode;
+
+    const legacyMode = Number(flags?.boundingBox_mode);
+    if (legacyMode === 2) return "always";
+    if (legacyMode === 1) return "owned";
+    return null;
+  }
+
+  _getLockViewBoundingDrawing(scene) {
+    const drawings = Array.from(scene?.drawings ?? [])
+      .filter((drawing) => drawing?.shape?.type === "r" && this._getLockViewBoundingMode(drawing));
+
+    return drawings.find((drawing) => this._getLockViewBoundingMode(drawing) === "always")
+      ?? drawings[0]
+      ?? null;
+  }
+
+  _getDrawingAnchor(scene, drawing) {
+    const bounds = this._getVisibleSceneBounds(scene);
+    const width = Math.abs(Number(drawing?.shape?.width ?? drawing?.width ?? 0));
+    const height = Math.abs(Number(drawing?.shape?.height ?? drawing?.height ?? 0));
+    const x = Number(drawing?.x ?? 0);
+    const y = Number(drawing?.y ?? 0);
+    const positions = {
+      "top-left": { x: bounds.x, y: bounds.y },
+      "top-right": { x: bounds.x + bounds.width - width, y: bounds.y },
+      "bottom-left": { x: bounds.x, y: bounds.y + bounds.height - height },
+      "bottom-right": {
+        x: bounds.x + bounds.width - width,
+        y: bounds.y + bounds.height - height
+      }
+    };
+
+    return Object.entries(positions).reduce((closest, [value, position]) => {
+      const distance = ((x - position.x) ** 2) + ((y - position.y) ** 2);
+      return distance < closest.distance ? { value, distance } : closest;
+    }, { value: "top-left", distance: Number.POSITIVE_INFINITY }).value;
+  }
+
   _prepareSceneData() {
     const scene = this._getSelectedScene();
 
@@ -282,38 +324,41 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       return {
         available: false,
         name: "No selected scene",
-        boundingTiles: [],
-        boundingTileCount: 0,
-        shareMediaActive: !!game.modules.get("share-media")?.active
+        gridSize: "—",
+        gridSizeValue: 50,
+        gridSizeMin: 50,
+        gridSizeMax: 500,
+        gridSizeStep: 25,
+        gridDisabled: true,
+        gridTitle: "Select or view a scene to change its grid size",
+        boundingTileId: "",
+        fixDisabled: true,
+        fixTitle: "Select or view a scene to fix its bounds",
+        lockViewBounds: { available: false }
       };
     }
 
     const tiles = Array.from(scene.tiles ?? []);
-    const visibleBounds = this._getVisibleSceneBounds(scene);
-    const boundingTiles = tiles
-      .filter((tile) => {
-        const enabled = this._getShareMediaFlag(tile, "enabled");
-        const legacyBounding = this._getShareMediaFlag(tile, "isBounding");
-        return enabled === true || enabled === 1 || enabled === "true"
-          || legacyBounding === true || legacyBounding === 1 || legacyBounding === "true";
-      })
-      .map((tile, index) => ({
-        id: tile.id,
-        name: this._getShareMediaFlag(tile, "name") || `Bounding tile ${index + 1}`,
-        x: this._formatSceneNumber(tile.x),
-        y: this._formatSceneNumber(tile.y),
-        width: this._formatSceneNumber(tile.width),
-        height: this._formatSceneNumber(tile.height),
-        rotation: this._formatSceneNumber(tile.rotation ?? 0),
-        fitsVisibleArea: Number(tile.x) >= visibleBounds.x
-          && Number(tile.y) >= visibleBounds.y
-          && (Number(tile.x) + Math.abs(Number(tile.width))) <= (visibleBounds.x + visibleBounds.width)
-          && (Number(tile.y) + Math.abs(Number(tile.height))) <= (visibleBounds.y + visibleBounds.height)
-      }));
+    const isEnabled = (value) => value === true || value === 1 || value === "true";
+    const boundingTile = tiles.find((tile) => isEnabled(this._getShareMediaFlag(tile, "isBounding")))
+      ?? tiles.find((tile) => isEnabled(this._getShareMediaFlag(tile, "enabled")))
+      ?? null;
 
     const gridSize = scene.grid?.size ?? scene.dimensions?.size;
     const numericGridSize = Number(gridSize) || 100;
     const gridSizeMax = Math.max(500, Math.ceil(numericGridSize / 25) * 25);
+    const canEdit = scene.isOwner ?? !!game.user?.isGM;
+    const boundingTileName = this._getShareMediaFlag(boundingTile, "name") || "bounding tile";
+    const lockViewDrawing = this._getLockViewBoundingDrawing(scene);
+    const drawingAnchor = lockViewDrawing
+      ? this._getDrawingAnchor(scene, lockViewDrawing)
+      : "top-left";
+    const anchorOptions = [
+      { value: "top-left", label: "Top Left" },
+      { value: "top-right", label: "Top Right" },
+      { value: "bottom-left", label: "Bottom Left" },
+      { value: "bottom-right", label: "Bottom Right" }
+    ].map((option) => ({ ...option, selected: option.value === drawingAnchor }));
 
     return {
       available: true,
@@ -324,18 +369,30 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       gridSizeMin: 50,
       gridSizeMax,
       gridSizeStep: 25,
-      canEdit: scene.isOwner ?? !!game.user?.isGM,
-      width: this._formatSceneNumber(scene.width ?? scene.dimensions?.sceneWidth),
-      height: this._formatSceneNumber(scene.height ?? scene.dimensions?.sceneHeight),
-      visibleBounds: {
-        x: this._formatSceneNumber(visibleBounds.x),
-        y: this._formatSceneNumber(visibleBounds.y),
-        width: this._formatSceneNumber(visibleBounds.width),
-        height: this._formatSceneNumber(visibleBounds.height)
-      },
-      boundingTiles,
-      boundingTileCount: boundingTiles.length,
-      shareMediaActive: !!game.modules.get("share-media")?.active
+      gridDisabled: !canEdit,
+      gridTitle: canEdit
+        ? `Change ${scene.name || "selected Scene"} grid size`
+        : `You cannot edit ${scene.name || "the selected Scene"}`,
+      boundingTileId: boundingTile?.id ?? "",
+      fixDisabled: !canEdit || (!boundingTile && !lockViewDrawing),
+      fixTitle: !canEdit
+        ? `You cannot edit ${scene.name || "the selected Scene"}`
+        : boundingTile && lockViewDrawing
+          ? `Fit ${boundingTileName} and anchor the Lock View Bounding Box`
+          : boundingTile
+            ? `Fit ${boundingTileName} to the selected Scene`
+            : lockViewDrawing
+              ? "Anchor the Lock View Bounding Box to the selected Scene"
+              : "No bounds were found on the selected Scene",
+      lockViewBounds: {
+        available: !!lockViewDrawing,
+        drawingId: lockViewDrawing?.id ?? "",
+        disabled: !canEdit,
+        options: anchorOptions,
+        title: canEdit
+          ? "Anchor the Lock View bounding drawing to a corner of the visible Scene"
+          : `You cannot edit ${scene.name || "the selected Scene"}`
+      }
     };
   }
 
@@ -549,6 +606,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (gridSizeOutput) gridSizeOutput.textContent = event.currentTarget.value;
     });
     gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
+    root.querySelector("[data-role='lockview-anchor']")
+      ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
       thumb.addEventListener("click", (event) => this._onThumbClick(event));
@@ -590,7 +649,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "updateScene",
       "createTile",
       "updateTile",
-      "deleteTile"
+      "deleteTile",
+      "createDrawing",
+      "updateDrawing",
+      "deleteDrawing"
     ];
 
     for (const hookName of sceneHooks) {
@@ -704,7 +766,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     try {
       await scene.update({ "grid.size": gridSize });
-      ui.notifications.info(`Grid size updated to ${gridSize}px.`);
     } catch (error) {
       console.error(`${MODULE_ID} | Could not update Scene grid size`, error);
       ui.notifications.error("Could not update the Scene grid size.");
@@ -712,36 +773,112 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  async _fitBoundingTileToScene(event, target = event.currentTarget) {
-    event.preventDefault();
-    event.stopPropagation();
-
+  async _anchorLockViewBounds(event, trigger = event.currentTarget) {
     const scene = this._getSelectedScene();
-    const tileId = target?.dataset?.tileId;
-    if (!scene || !tileId) return;
+    const select = event.currentTarget;
+    const drawingId = select?.dataset?.drawingId;
+    const anchor = select?.value;
+    if (!scene || !drawingId || !anchor) return;
 
-    const tile = scene.tiles?.get?.(tileId)
-      ?? Array.from(scene.tiles ?? []).find((candidate) => candidate.id === tileId);
-    if (!tile) {
-      ui.notifications.warn("The Share Media bounding tile could not be found.");
+    const drawing = scene.drawings?.get?.(drawingId)
+      ?? Array.from(scene.drawings ?? []).find((candidate) => candidate.id === drawingId);
+    if (!drawing || !this._getLockViewBoundingMode(drawing)) {
+      ui.notifications.warn("The Lock View Bounding Box drawing could not be found.");
       return;
     }
 
     const bounds = this._getVisibleSceneBounds(scene);
-    target.disabled = true;
+    const width = Math.abs(Number(drawing.shape?.width ?? drawing.width ?? 0));
+    const height = Math.abs(Number(drawing.shape?.height ?? drawing.height ?? 0));
+    const positions = {
+      "top-left": { x: bounds.x, y: bounds.y },
+      "top-right": { x: bounds.x + bounds.width - width, y: bounds.y },
+      "bottom-left": { x: bounds.x, y: bounds.y + bounds.height - height },
+      "bottom-right": {
+        x: bounds.x + bounds.width - width,
+        y: bounds.y + bounds.height - height
+      }
+    };
+    const position = positions[anchor];
+    if (!position) return;
+
+    select.disabled = true;
+    if (trigger && trigger !== select) trigger.disabled = true;
 
     try {
-      await tile.update({
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-        rotation: 0
-      });
-      ui.notifications.info(`Fitted ${this._getShareMediaFlag(tile, "name") || "bounding tile"} to the visible Scene.`);
+      await drawing.update(position);
+      const label = select.options?.[select.selectedIndex]?.textContent?.trim() || anchor;
+      ui.notifications.info(`Bounding Box anchored to ${label}.`);
     } catch (error) {
-      console.error(`${MODULE_ID} | Could not fit Share Media bounding tile`, error);
-      ui.notifications.error("Could not fit the bounding tile to the visible Scene.");
+      console.error(`${MODULE_ID} | Could not anchor Lock View bounding drawing`, error);
+      ui.notifications.error("Could not anchor the Lock View Bounding Box.");
+    } finally {
+      select.disabled = false;
+      if (trigger && trigger !== select) trigger.disabled = false;
+    }
+  }
+
+  async _fixSceneBounds(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const scene = this._getSelectedScene();
+    if (!scene || !target) return;
+
+    const bounds = this._getVisibleSceneBounds(scene);
+    const operations = [];
+
+    const tileId = target.dataset?.tileId;
+    if (tileId) {
+      const tile = scene.tiles?.get?.(tileId)
+        ?? Array.from(scene.tiles ?? []).find((candidate) => candidate.id === tileId);
+      if (tile) {
+        operations.push(() => tile.update({
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          rotation: 0
+        }));
+      }
+    }
+
+    const select = this.element?.querySelector?.("[data-role='lockview-anchor']");
+    const drawingId = select?.dataset?.drawingId;
+    const anchor = select?.value;
+    if (drawingId && anchor) {
+      const drawing = scene.drawings?.get?.(drawingId)
+        ?? Array.from(scene.drawings ?? []).find((candidate) => candidate.id === drawingId);
+      if (drawing && this._getLockViewBoundingMode(drawing)) {
+        const width = Math.abs(Number(drawing.shape?.width ?? drawing.width ?? 0));
+        const height = Math.abs(Number(drawing.shape?.height ?? drawing.height ?? 0));
+        const positions = {
+          "top-left": { x: bounds.x, y: bounds.y },
+          "top-right": { x: bounds.x + bounds.width - width, y: bounds.y },
+          "bottom-left": { x: bounds.x, y: bounds.y + bounds.height - height },
+          "bottom-right": {
+            x: bounds.x + bounds.width - width,
+            y: bounds.y + bounds.height - height
+          }
+        };
+        const position = positions[anchor];
+        if (position) operations.push(() => drawing.update(position));
+      }
+    }
+
+    if (!operations.length) {
+      ui.notifications.warn("No Scene bounds were found to fix.");
+      return;
+    }
+
+    target.disabled = true;
+    try {
+      for (const update of operations) await update();
+      ui.notifications.info("Scene bounds fixed.");
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not fix Scene bounds`, error);
+      ui.notifications.error("Could not fix the Scene bounds.");
+    } finally {
       target.disabled = false;
     }
   }
