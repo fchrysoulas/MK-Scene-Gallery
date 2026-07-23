@@ -2,7 +2,56 @@ import { MODULE_ID } from "./settings.js";
 import { indexImages, getCachedIndex, clearIndexCache } from "./fileIndex.js";
 import { openShareMediaPopout } from "./share.js";
 
-export class MediaGalleryApp extends Application {
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+
+export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
+  static DEFAULT_OPTIONS = {
+    id: "mk-scene-gallery-app",
+    classes: ["mk-scene-gallery", "mg-glass-window"],
+    position: {
+      width: 1100,
+      height: 720
+    },
+    window: {
+      title: "MK-Scene-Gallery",
+      icon: "fas fa-images",
+      resizable: true,
+      minimizable: true
+    },
+    actions: {
+      "pick-folder": async function () {
+        await this._pickFolder();
+      },
+      "add-image": async function () {
+        await this._addImage();
+      },
+      "refresh-gallery": async function () {
+        await this._refreshGallery();
+      },
+      "load-more": async function () {
+        this._loadMore();
+      },
+      "select-folder": async function (event, target) {
+        this._selectFolder(event, target);
+      },
+      "toggle-folder": async function (event, target) {
+        this._toggleFolder(event, target);
+      },
+      "clear-search": async function () {
+        this._clearSearch();
+      },
+      "share-file": async function (event, target) {
+        await this._shareFile(event, target);
+      }
+    }
+  };
+
+  static PARTS = {
+    gallery: {
+      template: `modules/${MODULE_ID}/templates/gallery.hbs`
+    }
+  };
+
   constructor(options = {}) {
     super(options);
 
@@ -20,6 +69,9 @@ export class MediaGalleryApp extends Application {
     this._lastProgressRender = 0;
 
     this._openFolders = new Set();
+    this._activeFolder = "";
+    this._searchRenderTimer = null;
+    this._restoreSearchFocus = false;
 
     this._indexRunId = 0;
     this._isClosing = false;
@@ -27,41 +79,28 @@ export class MediaGalleryApp extends Application {
     this._isUploading = false;
   }
 
-  static get defaultOptions() {
-    const version = game.modules.get(MODULE_ID)?.version ?? "0.0.0";
-
-    return foundry.utils.mergeObject(super.defaultOptions, {
-      id: "mk-scene-gallery-app",
-      title: `MK-Scene-Gallery v${version}`,
-      template: `modules/${MODULE_ID}/templates/gallery.hbs`,
-      width: 980,
-      height: 720,
-      resizable: true,
-      scrollY: [".mg-scroll"]
-    });
-  }
-
   async close(options = {}) {
     this._isClosing = true;
     this._indexRunId += 1;
     this.loading = false;
     this._indexPromise = null;
+    if (this._searchRenderTimer) {
+      clearTimeout(this._searchRenderTimer);
+      this._searchRenderTimer = null;
+    }
     return super.close(options);
   }
 
   _safeRender(force = false) {
     if (this._isClosing) return;
-
-    const states = Application.RENDER_STATES ?? {};
-    if (this._state === states.CLOSED || this._state === states.CLOSING) return;
-
-    this.render(force);
+    this.render({ force });
   }
 
   _resetIndexState() {
     this.page = 0;
     this.selected.clear();
     this._openFolders.clear();
+    this._activeFolder = "";
 
     this.files = [];
     this.total = 0;
@@ -181,8 +220,9 @@ export class MediaGalleryApp extends Application {
     })();
   }
 
-  async render(force, options) {
-    return super.render(force, options);
+  async _prepareContext(options) {
+    const context = await super._prepareContext(options);
+    return foundry.utils.mergeObject(context, this.getData(), { inplace: false });
   }
 
   _toServedUrl(path) {
@@ -228,6 +268,9 @@ export class MediaGalleryApp extends Application {
       fullPath: base || "",
       depth: 0,
       open: true,
+      selected: false,
+      fileCount: 0,
+      totalCount: 0,
       files: [],
       children: []
     };
@@ -247,6 +290,9 @@ export class MediaGalleryApp extends Application {
         fullPath,
         depth: parentNode.depth + 1,
         open: this._openFolders.has(fullPath),
+        selected: false,
+        fileCount: 0,
+        totalCount: 0,
         files: [],
         children: []
       };
@@ -272,17 +318,28 @@ export class MediaGalleryApp extends Application {
     const sortNode = (node) => {
       node.children.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
       node.files.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
-      node.children.forEach(sortNode);
+      node.fileCount = node.files.length;
+      node.totalCount = node.fileCount;
+      node.children.forEach((child) => {
+        sortNode(child);
+        node.totalCount += child.totalCount;
+      });
     };
 
     sortNode(root);
+
+    if (!this._activeFolder || !nodeMap.has(this._activeFolder)) {
+      this._activeFolder = root.fullPath;
+    }
+
+    const activeNode = nodeMap.get(this._activeFolder) ?? root;
+    activeNode.selected = true;
+
     return root;
   }
 
-  _getVisibleFiles() {
-    const pageSize = game.settings.get(MODULE_ID, "pageSize");
-
-    const fileObjs = (this.files || []).map((path) => {
+  _getFileObjects() {
+    return (this.files || []).map((path) => {
       const label = String(path).split("/").pop() || String(path);
       const url = this._toServedUrl(path);
       const fullPath = String(path);
@@ -291,9 +348,17 @@ export class MediaGalleryApp extends Application {
 
       return { path, url, label, folder };
     });
+  }
 
+  _getVisibleFiles(fileObjs, baseDir) {
+    const pageSize = game.settings.get(MODULE_ID, "pageSize");
+    const rootPath = this._normalizeBaseDir(baseDir);
     const query = (this.filter || "").trim().toLowerCase();
-    const filtered = fileObjs.filter((file) => {
+    const inActiveFolder = fileObjs.filter((file) => {
+      if (!this._activeFolder || this._activeFolder === rootPath) return true;
+      return file.folder === this._activeFolder;
+    });
+    const filtered = inActiveFolder.filter((file) => {
       if (!query) return true;
       return file.path.toLowerCase().includes(query)
         || file.label.toLowerCase().includes(query)
@@ -309,8 +374,10 @@ export class MediaGalleryApp extends Application {
   getData() {
     const baseDir = game.settings.get(MODULE_ID, "baseDir");
     const recursive = game.settings.get(MODULE_ID, "recursive");
-    const { filtered, visible } = this._getVisibleFiles();
-    const tree = this._buildTree(visible, baseDir);
+    const fileObjs = this._getFileObjects();
+    const tree = this._buildTree(fileObjs, baseDir);
+    const { filtered, visible } = this._getVisibleFiles(fileObjs, baseDir);
+    const activeNode = this._findTreeNode(tree, this._activeFolder) ?? tree;
 
     const selectedMap = {};
     for (const path of this.selected) selectedMap[path] = true;
@@ -329,55 +396,145 @@ export class MediaGalleryApp extends Application {
       isUploading: !!this._isUploading,
       indexStats: this._indexStats,
       tree,
+      visibleFiles: visible,
+      activeFolderLabel: activeNode === tree ? "All media" : activeNode.label,
+      activeFolderPath: activeNode === tree
+        ? (this._normalizeBaseDir(baseDir)
+          ? `${this._normalizeBaseDir(baseDir)} (including subfolders)`
+          : "Choose a folder to begin")
+        : activeNode.fullPath,
+      singleFiltered: filtered.length === 1,
       selectedCount: this.selected.size,
       selectedMap,
       selectedPath
     };
   }
 
-  activateListeners(html) {
-    super.activateListeners(html);
+  _onRender(context, options) {
+    super._onRender(context, options);
 
-    html.find("[data-action='pick-folder']").on("click", () => this._pickFolder());
-    html.find("[data-action='add-image']").on("click", () => this._addImage());
-    html.find("[data-action='refresh-gallery']").on("click", () => this._refreshGallery());
-    html.find("[data-action='toggle-recursive']").on("change", (event) => this._toggleRecursive(event));
-    html.find("[data-action='load-more']").on("click", () => this._loadMore());
+    const root = this.element;
+    root.querySelector("[data-role='toggle-recursive']")
+      ?.addEventListener("change", (event) => this._toggleRecursive(event));
+    root.querySelector("[data-role='search']")
+      ?.addEventListener("input", (event) => this._onSearchInput(event));
 
-    html.find("[data-action='share-file']").on("click", async (event) => {
+    root.querySelectorAll(".mg-thumb").forEach((thumb) => {
+      thumb.addEventListener("click", (event) => this._onThumbClick(event));
+      thumb.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
       event.preventDefault();
-      event.stopPropagation();
-
-      const path = event.currentTarget?.dataset?.path;
-      if (!path) {
-        ui.notifications.warn("No image path found.");
-        return;
-      }
-
-      await openShareMediaPopout(path);
+      this._onThumbClick(event);
+      });
     });
 
-    html.find(".mg-thumb").on("click", (event) => this._onThumbClick(event));
-
-    html.find("details.mg-folder").on("toggle", (event) => {
-      const details = event.currentTarget;
-      const key = details?.dataset?.folder;
-      if (!key) return;
-
-      if (details.open) this._openFolders.add(key);
-      else this._openFolders.delete(key);
-    });
-
-    html.find(".mg-thumb img").on("error", (event) => {
+    root.querySelectorAll(".mg-thumb img").forEach((image) => image.addEventListener("error", (event) => {
       const img = event.currentTarget;
       const thumb = img.closest(".mg-thumb");
       if (thumb) thumb.classList.add("is-missing");
       img.style.display = "none";
-    });
+    }));
 
     if (!this._initialIndexScheduled && !this._indexed && !this.loading && !this._indexPromise) {
       this._scheduleInitialIndex();
     }
+
+    if (this._restoreSearchFocus) {
+      this._restoreSearchFocus = false;
+      const search = root.querySelector("[data-role='search']");
+      if (search) {
+        search.focus();
+        const end = search.value.length;
+        search.setSelectionRange(end, end);
+      }
+    }
+  }
+
+  _findTreeNode(node, fullPath) {
+    if (!node) return null;
+    if (node.fullPath === fullPath) return node;
+
+    for (const child of node.children || []) {
+      const match = this._findTreeNode(child, fullPath);
+      if (match) return match;
+    }
+
+    return null;
+  }
+
+  _openFolderAncestors(fullPath) {
+    const base = this._normalizeBaseDir(this._getBaseDir());
+    let relative = String(fullPath || "");
+    if (base && relative.startsWith(base)) relative = relative.slice(base.length);
+
+    const parts = this._splitFolderParts(relative);
+    let current = base;
+
+    for (const part of parts.slice(0, -1)) {
+      current = `${current}${part}/`;
+      this._openFolders.add(current);
+    }
+  }
+
+  _selectFolder(event, target = event.currentTarget) {
+    const folder = target?.dataset?.folder;
+    if (folder === undefined) return;
+
+    this._activeFolder = folder;
+    this._openFolderAncestors(folder);
+    this.page = 0;
+    this.selected.clear();
+    this._safeRender(false);
+  }
+
+  _toggleFolder(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const folder = target?.dataset?.folder;
+    if (!folder) return;
+
+    if (this._openFolders.has(folder)) this._openFolders.delete(folder);
+    else this._openFolders.add(folder);
+
+    this._safeRender(false);
+  }
+
+  _onSearchInput(event) {
+    this.filter = event.currentTarget?.value ?? "";
+    this.page = 0;
+    this._restoreSearchFocus = true;
+
+    if (this._searchRenderTimer) clearTimeout(this._searchRenderTimer);
+    this._searchRenderTimer = setTimeout(() => {
+      this._searchRenderTimer = null;
+      this._safeRender(false);
+    }, 140);
+  }
+
+  _clearSearch() {
+    if (this._searchRenderTimer) {
+      clearTimeout(this._searchRenderTimer);
+      this._searchRenderTimer = null;
+    }
+
+    this.filter = "";
+    this.page = 0;
+    this._restoreSearchFocus = true;
+    this._safeRender(false);
+  }
+
+  async _shareFile(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const path = target?.dataset?.path;
+    if (!path) {
+      ui.notifications.warn("No image path found.");
+      return;
+    }
+
+    await openShareMediaPopout(path);
   }
 
   async _pickFolder() {
@@ -483,6 +640,8 @@ export class MediaGalleryApp extends Application {
   }
 
   _onThumbClick(event) {
+    if (event.target?.closest?.("[data-action]")) return;
+
     const element = event.currentTarget;
     const path = element?.dataset?.path;
     if (!path) return;

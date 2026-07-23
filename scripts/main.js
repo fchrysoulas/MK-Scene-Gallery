@@ -11,7 +11,7 @@ function addSceneControlButton(controls) {
     title: "MK-Scene-Gallery",
     icon: "fas fa-images",
     visible: game.user.isGM,
-    onClick: () => new MediaGalleryApp().render(true),
+    onClick: () => new MediaGalleryApp().render({ force: true }),
     button: true
   });
 }
