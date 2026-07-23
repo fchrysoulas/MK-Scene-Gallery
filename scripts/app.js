@@ -37,6 +37,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "toggle-folder": async function (event, target) {
         this._toggleFolder(event, target);
       },
+      "toggle-pin-folder": async function (event, target) {
+        await this._togglePinnedFolder(event, target);
+      },
+      "fit-bound-to-scene": async function (event, target) {
+        await this._fitBoundingTileToScene(event, target);
+      },
       "clear-search": async function () {
         this._clearSearch();
       },
@@ -48,7 +54,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static PARTS = {
     gallery: {
-      template: `modules/${MODULE_ID}/templates/gallery.hbs`
+      template: `modules/${MODULE_ID}/templates/gallery.hbs`,
+      scrollable: [".mg-tree-scroll"]
     }
   };
 
@@ -70,8 +77,15 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this._openFolders = new Set();
     this._activeFolder = "";
+    const savedPins = game.settings.get(MODULE_ID, "pinnedFolders");
+    this._pinnedFolders = new Set(
+      Array.isArray(savedPins)
+        ? savedPins.filter((path) => typeof path === "string" && path.length)
+        : []
+    );
     this._searchRenderTimer = null;
     this._restoreSearchFocus = false;
+    this._sceneHookIds = [];
 
     this._indexRunId = 0;
     this._isClosing = false;
@@ -225,6 +239,106 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     return foundry.utils.mergeObject(context, this.getData(), { inplace: false });
   }
 
+  _formatSceneNumber(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+
+    return number.toLocaleString(undefined, {
+      maximumFractionDigits: Number.isInteger(number) ? 0 : 2
+    });
+  }
+
+  _getShareMediaFlag(tile, key) {
+    if (typeof tile?.getFlag === "function") {
+      return tile.getFlag("share-media", key);
+    }
+
+    return tile?.flags?.["share-media"]?.[key];
+  }
+
+  _getSelectedScene() {
+    return game.scenes?.viewed
+      ?? game.scenes?.current
+      ?? game.canvas?.scene
+      ?? globalThis.canvas?.scene
+      ?? game.scenes?.active
+      ?? null;
+  }
+
+  _getVisibleSceneBounds(scene) {
+    const dimensions = scene?.dimensions ?? scene?.getDimensions?.() ?? {};
+    return {
+      x: Number(dimensions.sceneX ?? 0),
+      y: Number(dimensions.sceneY ?? 0),
+      width: Number(dimensions.sceneWidth ?? scene?.width ?? 0),
+      height: Number(dimensions.sceneHeight ?? scene?.height ?? 0)
+    };
+  }
+
+  _prepareSceneData() {
+    const scene = this._getSelectedScene();
+
+    if (!scene) {
+      return {
+        available: false,
+        name: "No selected scene",
+        boundingTiles: [],
+        boundingTileCount: 0,
+        shareMediaActive: !!game.modules.get("share-media")?.active
+      };
+    }
+
+    const tiles = Array.from(scene.tiles ?? []);
+    const visibleBounds = this._getVisibleSceneBounds(scene);
+    const boundingTiles = tiles
+      .filter((tile) => {
+        const enabled = this._getShareMediaFlag(tile, "enabled");
+        const legacyBounding = this._getShareMediaFlag(tile, "isBounding");
+        return enabled === true || enabled === 1 || enabled === "true"
+          || legacyBounding === true || legacyBounding === 1 || legacyBounding === "true";
+      })
+      .map((tile, index) => ({
+        id: tile.id,
+        name: this._getShareMediaFlag(tile, "name") || `Bounding tile ${index + 1}`,
+        x: this._formatSceneNumber(tile.x),
+        y: this._formatSceneNumber(tile.y),
+        width: this._formatSceneNumber(tile.width),
+        height: this._formatSceneNumber(tile.height),
+        rotation: this._formatSceneNumber(tile.rotation ?? 0),
+        fitsVisibleArea: Number(tile.x) >= visibleBounds.x
+          && Number(tile.y) >= visibleBounds.y
+          && (Number(tile.x) + Math.abs(Number(tile.width))) <= (visibleBounds.x + visibleBounds.width)
+          && (Number(tile.y) + Math.abs(Number(tile.height))) <= (visibleBounds.y + visibleBounds.height)
+      }));
+
+    const gridSize = scene.grid?.size ?? scene.dimensions?.size;
+    const numericGridSize = Number(gridSize) || 100;
+    const gridSizeMax = Math.max(500, Math.ceil(numericGridSize / 25) * 25);
+
+    return {
+      available: true,
+      id: scene.id,
+      name: scene.name || "Untitled scene",
+      gridSize: this._formatSceneNumber(gridSize),
+      gridSizeValue: numericGridSize,
+      gridSizeMin: 50,
+      gridSizeMax,
+      gridSizeStep: 25,
+      canEdit: scene.isOwner ?? !!game.user?.isGM,
+      width: this._formatSceneNumber(scene.width ?? scene.dimensions?.sceneWidth),
+      height: this._formatSceneNumber(scene.height ?? scene.dimensions?.sceneHeight),
+      visibleBounds: {
+        x: this._formatSceneNumber(visibleBounds.x),
+        y: this._formatSceneNumber(visibleBounds.y),
+        width: this._formatSceneNumber(visibleBounds.width),
+        height: this._formatSceneNumber(visibleBounds.height)
+      },
+      boundingTiles,
+      boundingTileCount: boundingTiles.length,
+      shareMediaActive: !!game.modules.get("share-media")?.active
+    };
+  }
+
   _toServedUrl(path) {
     const raw = String(path);
     let decoded = raw;
@@ -269,6 +383,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       depth: 0,
       open: true,
       selected: false,
+      pinned: false,
       fileCount: 0,
       totalCount: 0,
       files: [],
@@ -291,6 +406,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         depth: parentNode.depth + 1,
         open: this._openFolders.has(fullPath),
         selected: false,
+        pinned: this._pinnedFolders.has(fullPath),
         fileCount: 0,
         totalCount: 0,
         files: [],
@@ -316,7 +432,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     const sortNode = (node) => {
-      node.children.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+      node.children.sort((a, b) => {
+        if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+        return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+      });
       node.files.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
       node.fileCount = node.files.length;
       node.totalCount = node.fileCount;
@@ -378,6 +497,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const tree = this._buildTree(fileObjs, baseDir);
     const { filtered, visible } = this._getVisibleFiles(fileObjs, baseDir);
     const activeNode = this._findTreeNode(tree, this._activeFolder) ?? tree;
+    const pinnedFolders = Array.from(this._pinnedFolders)
+      .map((fullPath) => this._findTreeNode(tree, fullPath))
+      .filter(Boolean)
+      .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 
     const selectedMap = {};
     for (const path of this.selected) selectedMap[path] = true;
@@ -396,6 +519,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       isUploading: !!this._isUploading,
       indexStats: this._indexStats,
       tree,
+      pinnedFolders,
       visibleFiles: visible,
       activeFolderLabel: activeNode === tree ? "All media" : activeNode.label,
       activeFolderPath: activeNode === tree
@@ -403,6 +527,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
           ? `${this._normalizeBaseDir(baseDir)} (including subfolders)`
           : "Choose a folder to begin")
         : activeNode.fullPath,
+      sceneData: this._prepareSceneData(),
       singleFiltered: filtered.length === 1,
       selectedCount: this.selected.size,
       selectedMap,
@@ -418,6 +543,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ?.addEventListener("change", (event) => this._toggleRecursive(event));
     root.querySelector("[data-role='search']")
       ?.addEventListener("input", (event) => this._onSearchInput(event));
+    const gridSizeSlider = root.querySelector("[data-role='grid-size']");
+    const gridSizeOutput = root.querySelector("[data-role='grid-size-value']");
+    gridSizeSlider?.addEventListener("input", (event) => {
+      if (gridSizeOutput) gridSizeOutput.textContent = event.currentTarget.value;
+    });
+    gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
       thumb.addEventListener("click", (event) => this._onThumbClick(event));
@@ -448,6 +579,33 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         search.setSelectionRange(end, end);
       }
     }
+  }
+
+  _onFirstRender(context, options) {
+    super._onFirstRender(context, options);
+
+    const rerenderSceneData = () => this._safeRender(false);
+    const sceneHooks = [
+      "canvasReady",
+      "updateScene",
+      "createTile",
+      "updateTile",
+      "deleteTile"
+    ];
+
+    for (const hookName of sceneHooks) {
+      const hookId = Hooks.on(hookName, rerenderSceneData);
+      this._sceneHookIds.push([hookName, hookId]);
+    }
+  }
+
+  _onClose(options) {
+    for (const [hookName, hookId] of this._sceneHookIds) {
+      Hooks.off(hookName, hookId);
+    }
+    this._sceneHookIds = [];
+
+    super._onClose(options);
   }
 
   _findTreeNode(node, fullPath) {
@@ -500,6 +658,27 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
+  async _togglePinnedFolder(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const folder = target?.dataset?.folder;
+    if (!folder) return;
+
+    const nextPins = new Set(this._pinnedFolders);
+    if (nextPins.has(folder)) nextPins.delete(folder);
+    else nextPins.add(folder);
+
+    try {
+      await game.settings.set(MODULE_ID, "pinnedFolders", Array.from(nextPins));
+      this._pinnedFolders = nextPins;
+      this._safeRender(false);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not save pinned folders`, error);
+      ui.notifications.error("Could not update pinned folders.");
+    }
+  }
+
   _onSearchInput(event) {
     this.filter = event.currentTarget?.value ?? "";
     this.page = 0;
@@ -510,6 +689,61 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       this._searchRenderTimer = null;
       this._safeRender(false);
     }, 140);
+  }
+
+  async _updateGridSize(event) {
+    const scene = this._getSelectedScene();
+    const input = event.currentTarget;
+    if (!scene || !input) return;
+
+    const requested = Number(input.value);
+    if (!Number.isFinite(requested)) return;
+
+    const gridSize = Math.max(50, Math.round(requested / 25) * 25);
+    input.disabled = true;
+
+    try {
+      await scene.update({ "grid.size": gridSize });
+      ui.notifications.info(`Grid size updated to ${gridSize}px.`);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not update Scene grid size`, error);
+      ui.notifications.error("Could not update the Scene grid size.");
+      input.disabled = false;
+    }
+  }
+
+  async _fitBoundingTileToScene(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const scene = this._getSelectedScene();
+    const tileId = target?.dataset?.tileId;
+    if (!scene || !tileId) return;
+
+    const tile = scene.tiles?.get?.(tileId)
+      ?? Array.from(scene.tiles ?? []).find((candidate) => candidate.id === tileId);
+    if (!tile) {
+      ui.notifications.warn("The Share Media bounding tile could not be found.");
+      return;
+    }
+
+    const bounds = this._getVisibleSceneBounds(scene);
+    target.disabled = true;
+
+    try {
+      await tile.update({
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        rotation: 0
+      });
+      ui.notifications.info(`Fitted ${this._getShareMediaFlag(tile, "name") || "bounding tile"} to the visible Scene.`);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not fit Share Media bounding tile`, error);
+      ui.notifications.error("Could not fit the bounding tile to the visible Scene.");
+      target.disabled = false;
+    }
   }
 
   _clearSearch() {

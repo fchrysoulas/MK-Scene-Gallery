@@ -68,6 +68,18 @@
             <span class="mg-tree-label">{{label}}</span>
             <span class="mg-tree-count" title="{{totalCount}} in this branch; {{fileCount}} directly in this folder">{{totalCount}}</span>
           </button>
+
+          <button
+            type="button"
+            class="mg-tree-pin {{#if pinned}}is-pinned{{/if}}"
+            data-action="toggle-pin-folder"
+            data-folder="{{fullPath}}"
+            title="{{#if pinned}}Unpin{{else}}Pin{{/if}} {{label}}"
+            aria-label="{{#if pinned}}Unpin{{else}}Pin{{/if}} {{label}}"
+            aria-pressed="{{#if pinned}}true{{else}}false{{/if}}"
+          >
+            <i class="fas fa-thumbtack" aria-hidden="true"></i>
+          </button>
         </div>
 
         {{#if children.length}}
@@ -87,6 +99,44 @@
       </div>
 
       <div class="mg-tree-scroll">
+        {{#if pinnedFolders.length}}
+          <section class="mg-pinned-section" aria-label="Pinned folders">
+            <div class="mg-pinned-heading">
+              <span><i class="fas fa-thumbtack" aria-hidden="true"></i> Pinned</span>
+              <span>{{pinnedFolders.length}}</span>
+            </div>
+            <ul class="mg-pinned-list">
+              {{#each pinnedFolders as |folder|}}
+                <li class="mg-pinned-row {{#if folder.selected}}is-active{{/if}}">
+                  <button
+                    type="button"
+                    class="mg-pinned-folder"
+                    data-action="select-folder"
+                    data-folder="{{folder.fullPath}}"
+                    title="{{folder.fullPath}}"
+                    {{#if folder.selected}}aria-current="page"{{/if}}
+                  >
+                    <i class="fas fa-folder" aria-hidden="true"></i>
+                    <span class="mg-tree-label">{{folder.label}}</span>
+                    <span class="mg-tree-count">{{folder.totalCount}}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="mg-pinned-remove"
+                    data-action="toggle-pin-folder"
+                    data-folder="{{folder.fullPath}}"
+                    title="Unpin {{folder.label}}"
+                    aria-label="Unpin {{folder.label}}"
+                  >
+                    <i class="fas fa-xmark" aria-hidden="true"></i>
+                  </button>
+                </li>
+              {{/each}}
+            </ul>
+          </section>
+          <div class="mg-tree-divider" aria-hidden="true"></div>
+        {{/if}}
+
         <button
           type="button"
           class="mg-tree-root {{#if tree.selected}}is-active{{/if}}"
@@ -142,6 +192,111 @@
           {{/if}}
         </label>
       </div>
+
+      <section class="mg-scene-inspector" aria-label="Selected scene settings">
+        {{#if sceneData.available}}
+          <div class="mg-scene-summary">
+            <div class="mg-scene-identity">
+              <span class="mg-scene-kicker">
+                <i class="fas fa-circle-dot" aria-hidden="true"></i>
+                Selected scene
+              </span>
+              <strong title="{{sceneData.name}}">{{sceneData.name}}</strong>
+            </div>
+
+            <dl class="mg-scene-metrics">
+              <div class="mg-scene-metric">
+                <dt><i class="fas fa-border-all" aria-hidden="true"></i> Grid size</dt>
+                <dd class="mg-grid-size-control">
+                  <input
+                    type="range"
+                    data-role="grid-size"
+                    min="{{sceneData.gridSizeMin}}"
+                    max="{{sceneData.gridSizeMax}}"
+                    step="{{sceneData.gridSizeStep}}"
+                    value="{{sceneData.gridSizeValue}}"
+                    aria-label="Grid size in pixels"
+                    {{#unless sceneData.canEdit}}disabled{{/unless}}
+                  >
+                  <span class="mg-grid-size-reading">
+                    <output data-role="grid-size-value">{{sceneData.gridSize}}</output>
+                    <small>px</small>
+                  </span>
+                </dd>
+              </div>
+              <div class="mg-scene-metric">
+                <dt><i class="fas fa-ruler-combined" aria-hidden="true"></i> Scene dimensions</dt>
+                <dd>{{sceneData.width}} <span>×</span> {{sceneData.height}} <span>px</span></dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="mg-bounds-section">
+            <div class="mg-bounds-heading">
+              <span>
+                <i class="fas fa-vector-square" aria-hidden="true"></i>
+                Share Media bounds
+              </span>
+              <span class="mg-bounds-visible" title="Visible Scene rectangle">
+                X {{sceneData.visibleBounds.x}} · Y {{sceneData.visibleBounds.y}} ·
+                {{sceneData.visibleBounds.width}} × {{sceneData.visibleBounds.height}}
+              </span>
+              <span class="mg-bounds-count">{{sceneData.boundingTileCount}}</span>
+            </div>
+
+            {{#if sceneData.boundingTiles.length}}
+              <div class="mg-bound-list">
+                {{#each sceneData.boundingTiles as |tile|}}
+                  <article class="mg-bound-card" title="Share Media bounding tile {{tile.id}}">
+                    <div class="mg-bound-card-header">
+                      <strong>{{tile.name}}</strong>
+                      <span class="{{#if tile.fitsVisibleArea}}is-inside{{else}}is-outside{{/if}}">
+                        <i class="fas {{#if tile.fitsVisibleArea}}fa-circle-check{{else}}fa-triangle-exclamation{{/if}}" aria-hidden="true"></i>
+                        {{#if tile.fitsVisibleArea}}Inside{{else}}Outside{{/if}}
+                      </span>
+                    </div>
+                    <dl class="mg-bound-values">
+                      <div><dt>X</dt><dd>{{tile.x}}</dd></div>
+                      <div><dt>Y</dt><dd>{{tile.y}}</dd></div>
+                      <div><dt>W</dt><dd>{{tile.width}}</dd></div>
+                      <div><dt>H</dt><dd>{{tile.height}}</dd></div>
+                      <div><dt>R</dt><dd>{{tile.rotation}}°</dd></div>
+                    </dl>
+                    <button
+                      type="button"
+                      class="mg-fit-bound"
+                      data-action="fit-bound-to-scene"
+                      data-tile-id="{{tile.id}}"
+                      title="Set this tile to the selected Scene's visible rectangle"
+                      {{#unless @root.sceneData.canEdit}}disabled{{/unless}}
+                    >
+                      <i class="fas fa-expand" aria-hidden="true"></i>
+                      Fit to visible scene
+                    </button>
+                  </article>
+                {{/each}}
+              </div>
+            {{else}}
+              <div class="mg-no-bounds">
+                <i class="fas fa-vector-square" aria-hidden="true"></i>
+                {{#if sceneData.shareMediaActive}}
+                  No Share Media bounding tiles were found on this scene.
+                {{else}}
+                  Share Media is not currently enabled.
+                {{/if}}
+              </div>
+            {{/if}}
+          </div>
+        {{else}}
+          <div class="mg-no-scene">
+            <i class="fas fa-map" aria-hidden="true"></i>
+            <div>
+              <strong>No selected scene</strong>
+              <span>Select or view a scene to inspect its grid and Share Media bounds.</span>
+            </div>
+          </div>
+        {{/if}}
+      </section>
 
       <div class="mg-gallery-scroll">
         {{#*inline "thumbCard"}}

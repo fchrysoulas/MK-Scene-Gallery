@@ -4,7 +4,8 @@ export const LEGACY_MODULE_ID = "share-media-gallery";
 const DEFAULTS = {
   baseDir: "uploads/",
   recursive: true,
-  pageSize: 120
+  pageSize: 120,
+  pinnedFolders: []
 };
 
 export function registerSettings() {
@@ -33,6 +34,15 @@ export function registerSettings() {
     config: false,
     type: Number,
     default: DEFAULTS.pageSize
+  });
+
+  game.settings.register(MODULE_ID, "pinnedFolders", {
+    name: "Pinned gallery folders",
+    hint: "Folders pinned to the top of the MK-Scene-Gallery folder tree.",
+    scope: "client",
+    config: false,
+    type: Array,
+    default: DEFAULTS.pinnedFolders
   });
 
   game.settings.register(MODULE_ID, "legacyMigrationComplete", {
