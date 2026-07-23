@@ -1,0 +1,32 @@
+{
+  "id": "mk-scene-gallery",
+  "title": "MK-Scene-Gallery",
+  "description": "Browse scene and image folders as a thumbnail gallery, upload images, refresh the index, and open media through Share Media.",
+  "version": "0.4.0",
+  "authors": [
+    {
+      "name": "You"
+    }
+  ],
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12"
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/gallery.css"
+  ],
+  "relationships": {
+    "requires": [
+      {
+        "id": "share-media",
+        "type": "module",
+        "compatibility": {
+          "minimum": "1.0.0"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,124 @@
+<div class="mg-wrap">
+  <div class="mg-toolbar">
+    <button type="button" data-action="pick-folder">
+      <i class="fas fa-folder-open"></i> Folder
+    </button>
+
+    <button type="button" data-action="add-image">
+      <i class="fas fa-upload"></i> Add image
+    </button>
+
+    <button type="button" data-action="refresh-gallery">
+      <i class="fas fa-rotate-right"></i> Refresh
+    </button>
+
+    <label class="mg-toggle">
+      <input type="checkbox" data-action="toggle-recursive" {{#if recursive}}checked{{/if}}>
+      Include subfolders
+    </label>
+
+    <div class="mg-stats">
+      <span title="Indexed files">{{totalIndexed}} indexed</span>
+      <span title="Filtered files">{{totalFiltered}} match</span>
+      <span title="Showing in gallery">{{showing}} shown</span>
+    </div>
+  </div>
+
+  <div class="mg-scroll">
+    {{#if isIndexing}}
+      <div class="mg-loading-overlay" aria-live="polite">
+        <div class="mg-spinner" role="status" aria-label="Indexing media"></div>
+        <div class="mg-loading-text">
+          Indexing media… {{indexStats.foundFiles}} files, {{indexStats.scannedDirs}} folders
+        </div>
+      </div>
+    {{else if isUploading}}
+      <div class="mg-loading-overlay" aria-live="polite">
+        <div class="mg-spinner" role="status" aria-label="Uploading media"></div>
+        <div class="mg-loading-text">
+          Uploading image…
+        </div>
+      </div>
+    {{/if}}
+
+    {{#*inline "thumbCard"}}
+      <div
+        class="mg-thumb {{#if (lookup @root.selectedMap path)}}is-selected{{/if}}"
+        data-path="{{path}}"
+        title="{{path}}"
+      >
+        <div class="mg-thumb-img">
+          <img class="mg-img" src="{{url}}" alt="{{label}}">
+          <div class="mg-hover-actions">
+            <button
+              type="button"
+              class="mg-action"
+              data-action="share-file"
+              data-path="{{path}}"
+              title="Share in Share Media"
+              aria-label="Share in Share Media"
+            >
+              <i class="fas fa-share"></i>
+            </button>
+          </div>
+        </div>
+        <div class="mg-name" title="{{path}}">{{label}}</div>
+      </div>
+    {{/inline}}
+
+    {{#*inline "folderNode"}}
+      <details class="mg-folder" data-folder="{{fullPath}}" style="--depth: {{depth}};" {{#if open}}open{{/if}}>
+        <summary class="mg-folder-summary" title="{{fullPath}}">
+          <i class="fas fa-folder"></i>
+          <span class="mg-folder-name">{{label}}</span>
+          <span class="mg-folder-meta">
+            {{#if files.length}}<span class="mg-chip">{{files.length}} files</span>{{/if}}
+            {{#if children.length}}<span class="mg-chip">{{children.length}} folders</span>{{/if}}
+          </span>
+        </summary>
+
+        {{#if files.length}}
+          <div class="mg-grid mg-grid-nested">
+            {{#each files as |f|}}
+              {{> thumbCard f}}
+            {{/each}}
+          </div>
+        {{/if}}
+
+        {{#if children.length}}
+          <div class="mg-children">
+            {{#each children}}
+              {{> folderNode}}
+            {{/each}}
+          </div>
+        {{/if}}
+      </details>
+    {{/inline}}
+
+    {{#if tree}}
+      {{#if tree.files.length}}
+        <div class="mg-grid">
+          {{#each tree.files as |f|}}
+            {{> thumbCard f}}
+          {{/each}}
+        </div>
+      {{/if}}
+
+      {{#if tree.children.length}}
+        <div class="mg-children">
+          {{#each tree.children}}
+            {{> folderNode}}
+          {{/each}}
+        </div>
+      {{/if}}
+    {{/if}}
+  </div>
+
+  {{#if canLoadMore}}
+    <div class="mg-footer">
+      <button type="button" data-action="load-more">
+        Load more
+      </button>
+    </div>
+  {{/if}}
+</div>
