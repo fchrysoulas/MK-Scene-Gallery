@@ -9,7 +9,11 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 - Optionally include subfolders.
 - Browse images in folder groups.
 - Right-click a thumbnail to open a large image preview.
-- Set a custom, searchable title for any image from its thumbnail.
+- Open a right-side inspector to set an image name, description, and preferred Scene grid size.
+- Save complete per-image Scene presets for grid appearance and scale, darkness,
+  token vision, fog exploration, weather, background color, padding, and initial view.
+- Copy supported settings from the active Scene into an image preset.
+- Search images by path, name, folder, or description.
 - Configure the image-title font size in Module Settings.
 - Display an image on the active scene's Token Layer.
 - Crossfade between Token Layer images with a configurable transition duration.
@@ -25,9 +29,12 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 2. Open the left Scene Controls toolbar.
 3. Under the Token controls, click **MK-Scene-Gallery**.
 4. Pick a folder if needed.
-5. Hover an image and click its pencil button to set or clear a custom title.
-6. Hover an image and click its Layer button to display it on the active
-   scene's Token Layer.
+5. Left-click an image to open its details inspector, then set its name,
+   description, and Scene preset. Use **Copy Current** to capture the active
+   Scene configuration and current canvas view.
+6. Click **Display** in the inspector or use the thumbnail's Layer button to
+   display it on the active scene's Token Layer. Its saved grid size is applied
+   automatically first.
 7. Click **Remove scene image** to clear it from the scene.
 
 ## Rename and settings migration

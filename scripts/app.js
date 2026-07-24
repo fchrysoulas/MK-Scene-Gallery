@@ -4,12 +4,20 @@ import {
   MODULE_ID
 } from "./settings.js";
 import { indexImages, getCachedIndex, clearIndexCache } from "./fileIndex.js";
-import { scaleAmbientLightRadiiForGrid } from "./lighting.js";
 import {
   displayImageOnTokenLayer,
   getTokenLayerImage,
   removeImageFromTokenLayer
 } from "./tokenLayer.js";
+import {
+  applyScenePreset,
+  captureScenePreset,
+  hasScenePresetValues,
+  KEEP_CURRENT,
+  normalizeScenePreset,
+  prepareScenePresetForm,
+  readScenePresetForm
+} from "./scenePresets.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -55,14 +63,11 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-search": async function () {
         this._clearSearch();
       },
-      "edit-image-title": async function (event, target) {
-        this._editImageTitle(event, target);
+      "close-image-inspector": async function (event) {
+        this._closeImageInspector(event);
       },
-      "save-image-title": async function (event, target) {
-        await this._saveImageTitle(event, target);
-      },
-      "cancel-image-title": async function (event, target) {
-        this._cancelImageTitle(event, target);
+      "copy-scene-preset": async function (event, target) {
+        this._copyCurrentScenePreset(event, target);
       },
       "add-to-token-layer": async function (event, target) {
         await this._addToTokenLayer(event, target);
@@ -106,8 +111,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     );
     this._searchRenderTimer = null;
     this._restoreSearchFocus = false;
-    this._editingTitlePath = "";
-    this._restoreTitleFocus = false;
     this._sceneHookIds = [];
 
     this._indexRunId = 0;
@@ -544,12 +547,45 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const imageTitles = savedTitles && typeof savedTitles === "object" && !Array.isArray(savedTitles)
       ? savedTitles
       : {};
+    const savedMetadata = game.settings.get(MODULE_ID, "imageMetadata");
+    const imageMetadata = savedMetadata
+      && typeof savedMetadata === "object"
+      && !Array.isArray(savedMetadata)
+      ? savedMetadata
+      : {};
 
     return (this.files || []).map((path) => {
       const fileName = String(path).split("/").pop() || String(path);
-      const customTitle = typeof imageTitles[path] === "string"
-        ? imageTitles[path].trim()
+      const metadata = imageMetadata[path]
+        && typeof imageMetadata[path] === "object"
+        && !Array.isArray(imageMetadata[path])
+        ? imageMetadata[path]
+        : {};
+      const hasMetadataTitle = Object.prototype.hasOwnProperty.call(metadata, "title");
+      const customTitle = hasMetadataTitle
+        ? String(metadata.title || "").trim()
+        : typeof imageTitles[path] === "string"
+          ? imageTitles[path].trim()
+          : "";
+      const description = typeof metadata.description === "string"
+        ? metadata.description.trim()
         : "";
+      const rawScenePreset = metadata.scenePreset
+        && typeof metadata.scenePreset === "object"
+        && !Array.isArray(metadata.scenePreset)
+        ? { ...metadata.scenePreset }
+        : {};
+      if (
+        (rawScenePreset.gridSize === null || rawScenePreset.gridSize === undefined)
+        && metadata.gridSize !== null
+        && metadata.gridSize !== undefined
+      ) {
+        rawScenePreset.gridSize = metadata.gridSize;
+      }
+      const scenePreset = normalizeScenePreset(rawScenePreset, {
+        gridSizeMax: this._getGridSizeMax()
+      });
+      const gridSize = scenePreset.gridSize ?? "";
       const label = customTitle || fileName;
       const url = this._toServedUrl(path);
       const fullPath = String(path);
@@ -562,8 +598,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         label,
         fileName,
         customTitle,
+        description,
+        gridSize,
+        scenePreset,
         folder,
-        isEditingTitle: this._editingTitlePath === path
       };
     });
   }
@@ -580,6 +618,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!query) return true;
       return file.path.toLowerCase().includes(query)
         || file.label.toLowerCase().includes(query)
+        || file.description.toLowerCase().includes(query)
         || file.folder.toLowerCase().includes(query);
     });
 
@@ -605,6 +644,14 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const path of this.selected) selectedMap[path] = true;
 
     const selectedPath = this.selected.size ? Array.from(this.selected)[0] : "";
+    const selectedImage = selectedPath
+      ? fileObjs.find((file) => file.path === selectedPath) ?? null
+      : null;
+    if (selectedImage) {
+      selectedImage.scenePresetForm = prepareScenePresetForm(selectedImage.scenePreset, {
+        gridSizeMax: this._getGridSizeMax()
+      });
+    }
 
     return {
       baseDir,
@@ -631,7 +678,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       singleFiltered: filtered.length === 1,
       selectedCount: this.selected.size,
       selectedMap,
-      selectedPath
+      selectedPath,
+      selectedImage,
+      imageGridSizeMin: 50,
+      imageGridSizeMax: this._getGridSizeMax(),
+      imageGridSizeStep: 25,
+      selectedSceneAvailable: !!this._getSelectedScene()
     };
   }
 
@@ -662,19 +714,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
-    root.querySelectorAll("[data-role='image-title-input']").forEach((input) => {
-      input.addEventListener("click", (event) => event.stopPropagation());
-      input.addEventListener("keydown", (event) => {
-        event.stopPropagation();
-        if (event.key === "Enter") {
-          event.preventDefault();
-          this._saveImageTitle(event, input);
-        } else if (event.key === "Escape") {
-          event.preventDefault();
-          this._cancelImageTitle(event, input);
-        }
-      });
-    });
+    root.querySelector("[data-role='image-details-form']")
+      ?.addEventListener("submit", (event) => this._saveImageDetails(event));
 
     const previewDialog = root.querySelector("[data-role='image-preview']");
     previewDialog?.querySelector("[data-role='image-preview-close']")
@@ -707,14 +748,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    if (this._restoreTitleFocus) {
-      this._restoreTitleFocus = false;
-      const titleInput = root.querySelector("[data-role='image-title-input']");
-      if (titleInput) {
-        titleInput.focus();
-        titleInput.select();
-      }
-    }
   }
 
   _onFirstRender(context, options) {
@@ -835,31 +868,47 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const input = event.currentTarget;
     if (!scene || !input) return;
 
-    const requested = Number(input.value);
-    if (!Number.isFinite(requested)) return;
-
-    const gridSizeMax = this._getGridSizeMax();
-    const gridSize = Math.min(gridSizeMax, Math.max(50, Math.round(requested / 25) * 25));
-    const previousGridSize = Number(scene.grid?.size ?? scene.dimensions?.size);
-    if (!Number.isFinite(previousGridSize) || previousGridSize <= 0) {
-      ui.notifications.error("The current Scene grid size is invalid.");
-      return;
-    }
-    if (gridSize === previousGridSize) return;
-
     input.disabled = true;
+    try {
+      await this._applySceneGridSize(scene, input.value, { notifyOnSuccess: true });
+    } finally {
+      input.disabled = false;
+    }
+  }
+
+  async _applySceneGridSize(scene, requested, { notifyOnSuccess = false } = {}) {
+    const requestedNumber = Number(requested);
+    if (!scene || !Number.isFinite(requestedNumber)) return false;
+
+    if (!(scene.isOwner ?? !!game.user?.isGM)) {
+      ui.notifications.error(`You cannot edit ${scene.name || "the selected Scene"}.`);
+      return false;
+    }
+
+    const normalized = normalizeScenePreset(
+      { gridSize: requestedNumber },
+      { gridSizeMax: this._getGridSizeMax() }
+    );
+    if (normalized.gridSize === Number(scene.grid?.size ?? scene.dimensions?.size)) {
+      return true;
+    }
 
     try {
-      await scene.update({ "grid.size": gridSize });
-      await scaleAmbientLightRadiiForGrid(scene, previousGridSize, gridSize);
-      ui.notifications.info(
-        `Grid size changed to ${gridSize} px. Ambient Light positions and pixel coverage were preserved.`
+      const result = await applyScenePreset(
+        scene,
+        normalized,
+        { gridSizeMax: this._getGridSizeMax() }
       );
+      if (notifyOnSuccess) {
+        ui.notifications.info(
+          `Grid size changed to ${result.preset.gridSize} px. Ambient Light positions and pixel coverage were preserved.`
+        );
+      }
+      return true;
     } catch (error) {
       console.error(`${MODULE_ID} | Could not update Scene grid size`, error);
       ui.notifications.error("Could not update the Scene grid size and Ambient Light radii.");
-    } finally {
-      input.disabled = false;
+      return false;
     }
   }
 
@@ -970,56 +1019,71 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _editImageTitle(event, target = event.currentTarget) {
+  _closeImageInspector(event) {
     event.preventDefault();
     event.stopPropagation();
 
-    const path = target?.dataset?.path;
+    this.selected.clear();
+    this._safeRender(false);
+  }
+
+  _copyCurrentScenePreset(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const scene = this._getSelectedScene();
+    const form = target?.closest?.("[data-role='image-details-form']");
+    if (!scene || !form) return;
+
+    const preset = captureScenePreset(scene, { gridSizeMax: this._getGridSizeMax() });
+    const setValue = (name, value) => {
+      const field = form.elements?.[name];
+      if (field) field.value = value ?? "";
+    };
+
+    for (const [name, value] of Object.entries(preset)) {
+      if (name === "weather") {
+        setValue(name, value === null ? KEEP_CURRENT : value);
+      } else {
+        setValue(name, value);
+      }
+    }
+  }
+
+  async _saveImageDetails(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const path = form?.dataset?.path;
     if (!path) return;
 
-    this._editingTitlePath = path;
-    this._restoreTitleFocus = true;
-    this._safeRender(false);
-  }
+    const title = String(form.elements?.title?.value ?? "").trim();
+    const description = String(form.elements?.description?.value ?? "").trim();
+    const scenePreset = readScenePresetForm(form, {
+      gridSizeMax: this._getGridSizeMax()
+    });
 
-  _cancelImageTitle(event, target = event.currentTarget) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    this._editingTitlePath = "";
-    this._restoreTitleFocus = false;
-    this._safeRender(false);
-  }
-
-  async _saveImageTitle(event, target = event.currentTarget) {
-    event.preventDefault();
-    event.stopPropagation();
-
-    const thumb = target?.closest?.(".mg-thumb");
-    const path = target?.dataset?.path || thumb?.dataset?.path;
-    const input = thumb?.querySelector?.("[data-role='image-title-input']");
-    if (!path || !input) return;
-
-    const title = input.value.trim();
-    const savedTitles = game.settings.get(MODULE_ID, "imageTitles");
-    const nextTitles = savedTitles && typeof savedTitles === "object" && !Array.isArray(savedTitles)
-      ? { ...savedTitles }
+    const savedMetadata = game.settings.get(MODULE_ID, "imageMetadata");
+    const nextMetadata = savedMetadata
+      && typeof savedMetadata === "object"
+      && !Array.isArray(savedMetadata)
+      ? { ...savedMetadata }
       : {};
+    nextMetadata[path] = {
+      title,
+      description,
+      gridSize: scenePreset.gridSize,
+      scenePreset
+    };
 
-    if (title) nextTitles[path] = title;
-    else delete nextTitles[path];
-
-    input.disabled = true;
+    const submit = form.querySelector("button[type='submit']");
+    if (submit) submit.disabled = true;
 
     try {
-      await game.settings.set(MODULE_ID, "imageTitles", nextTitles);
-      this._editingTitlePath = "";
-      this._restoreTitleFocus = false;
-      ui.notifications.info(title ? "Image title saved." : "Image title cleared.");
+      await game.settings.set(MODULE_ID, "imageMetadata", nextMetadata);
     } catch (error) {
-      console.error(`${MODULE_ID} | Could not save image title`, error);
-      ui.notifications.error("Could not save the image title.");
-      this._restoreTitleFocus = true;
+      console.error(`${MODULE_ID} | Could not save image details`, error);
+      ui.notifications.error("Could not save the image details.");
     } finally {
       this._safeRender(false);
     }
@@ -1035,7 +1099,43 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
-    await displayImageOnTokenLayer(path, target?.dataset?.title);
+    const image = this._getFileObjects().find((candidate) => candidate.path === path);
+    const scene = this._getSelectedScene();
+    if (image && hasScenePresetValues(image.scenePreset)) {
+      if (!scene) {
+        ui.notifications.warn("Open a scene before displaying an image on its Token Layer.");
+        return;
+      }
+      if (!(scene.isOwner ?? !!game.user?.isGM)) {
+        ui.notifications.error(`You cannot edit ${scene.name || "the selected Scene"}.`);
+        return;
+      }
+
+      try {
+        await applyScenePreset(scene, image.scenePreset, {
+          gridSizeMax: this._getGridSizeMax()
+        });
+      } catch (error) {
+        console.error(`${MODULE_ID} | Could not apply image Scene preset`, error);
+        ui.notifications.error("Could not apply the image Scene preset.");
+        return;
+      }
+    }
+
+    const displayed = await displayImageOnTokenLayer(
+      path,
+      image?.label || target?.dataset?.title
+    );
+    if (!displayed || !image?.scenePreset) return;
+
+    const activeCanvas = globalThis.canvas;
+    if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return;
+
+    const view = {};
+    if (image.scenePreset.initialX !== null) view.x = image.scenePreset.initialX;
+    if (image.scenePreset.initialY !== null) view.y = image.scenePreset.initialY;
+    if (image.scenePreset.initialScale !== null) view.scale = image.scenePreset.initialScale;
+    if (Object.keys(view).length) await activeCanvas.animatePan(view);
   }
 
   async _removeTokenLayerImage(event, target = event.currentTarget) {

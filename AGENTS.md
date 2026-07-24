@@ -17,6 +17,7 @@ repository. Source files are loaded directly by Foundry.
 - `scripts/fileIndex.js`: Image discovery and index caching.
 - `scripts/lighting.js`: Ambient Light scaling for Scene grid-size changes.
 - `scripts/settings.js`: Module settings and legacy setting migration.
+- `scripts/scenePresets.js`: Per-image Scene preset normalization and application.
 - `scripts/tokenLayer.js`: Scene Token Layer image renderer.
 - `scripts/transitions.js`: Token Layer fade transition timing and animation.
 - `templates/gallery.hbs`: Handlebars application template.
@@ -48,6 +49,7 @@ node --check scripts/main.js
 node --check scripts/fileIndex.js
 node --check scripts/lighting.js
 node --check scripts/settings.js
+node --check scripts/scenePresets.js
 node --check scripts/tokenLayer.js
 node --check scripts/transitions.js
 node -e "JSON.parse(require('fs').readFileSync('module.json', 'utf8'))"

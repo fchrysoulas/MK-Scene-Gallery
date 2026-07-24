@@ -10,6 +10,7 @@ const DEFAULTS = {
   pageSize: 120,
   pinnedFolders: [],
   imageTitles: {},
+  imageMetadata: {},
   imageTitleFontSize: DEFAULT_IMAGE_TITLE_FONT_SIZE,
   tokenLayerTransitionMs: DEFAULT_TOKEN_LAYER_TRANSITION_MS,
   gridSizeMax: DEFAULT_GRID_SIZE_MAX
@@ -59,6 +60,15 @@ export function registerSettings() {
     config: false,
     type: Object,
     default: DEFAULTS.imageTitles
+  });
+
+  game.settings.register(MODULE_ID, "imageMetadata", {
+    name: "Image metadata",
+    hint: "Names, descriptions, and preferred Scene grid sizes keyed by image path.",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: DEFAULTS.imageMetadata
   });
 
   game.settings.register(MODULE_ID, "imageTitleFontSize", {

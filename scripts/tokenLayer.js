@@ -17,6 +17,36 @@ function getActiveScene() {
     ?? null;
 }
 
+function isSceneCanvasReady(scene, activeCanvas = globalThis.canvas) {
+  return !!activeCanvas?.ready && activeCanvas?.scene?.id === scene?.id;
+}
+
+function waitForSceneCanvasReady(scene, timeoutMs = 15000) {
+  if (isSceneCanvasReady(scene)) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let hookId = null;
+    let timer = null;
+
+    const finish = (ready) => {
+      if (settled) return;
+      settled = true;
+      if (hookId !== null) Hooks.off("canvasReady", hookId);
+      if (timer !== null) clearTimeout(timer);
+      resolve(ready);
+    };
+
+    hookId = Hooks.on("canvasReady", (activeCanvas) => {
+      if (isSceneCanvasReady(scene, activeCanvas)) finish(true);
+    });
+    timer = setTimeout(() => finish(false), timeoutMs);
+
+    // Cover the small race where the canvas became ready before the Hook was registered.
+    if (isSceneCanvasReady(scene)) finish(true);
+  });
+}
+
 function getImageLabel(path) {
   const fileName = String(path || "").split("/").pop() || "Gallery image";
 
@@ -136,15 +166,26 @@ class SceneGalleryTokenLayerRenderer {
     notifyOnError = true,
     animate = true
   } = {}) {
-    const generation = ++this.drawGeneration;
-    const transitionDuration = animate ? getTokenLayerTransitionDuration() : 0;
-
-    if (!scene || !canvas?.ready || !globalThis.PIXI) {
-      this.destroy();
-      const error = new Error("The Foundry canvas is not ready.");
+    if (!scene || !globalThis.PIXI) {
+      const error = new Error("The Foundry canvas is unavailable.");
       if (throwOnError) throw error;
       return false;
     }
+
+    if (!isSceneCanvasReady(scene)) {
+      const ready = await waitForSceneCanvasReady(scene);
+      if (!ready) {
+        const error = new Error("The Foundry canvas did not become ready in time.");
+        if (throwOnError) throw error;
+        if (notifyOnError && game.user?.isGM) {
+          ui.notifications.error(error.message);
+        }
+        return false;
+      }
+    }
+
+    const generation = ++this.drawGeneration;
+    const transitionDuration = animate ? getTokenLayerTransitionDuration() : 0;
 
     const image = scene.getFlag(MODULE_ID, FLAG_KEY);
     if (!image?.path) {
