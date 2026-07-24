@@ -1,8 +1,8 @@
 {
   "id": "mk-scene-gallery",
   "title": "MK-Scene-Gallery",
-  "description": "Browse scene and image folders as a thumbnail gallery, upload images, refresh the index, and open media through Share Media.",
-  "version": "0.6.0",
+  "description": "Browse scene and image folders as a thumbnail gallery, upload images, and display images on a scene Token Layer.",
+  "version": "0.7.0",
   "authors": [
     {
       "name": "Mikrokouneli"
@@ -10,7 +10,7 @@
   ],
   "compatibility": {
     "minimum": "12",
-    "verified": "12"
+    "verified": "13"
   },
   "esmodules": [
     "scripts/main.js"
@@ -18,15 +18,7 @@
   "styles": [
     "styles/gallery.css"
   ],
-  "relationships": {
-    "requires": [
-      {
-        "id": "share-media",
-        "type": "module",
-        "compatibility": {
-          "minimum": "1.0.0"
-        }
-      }
-    ]
-  }
+  "url": "https://github.com/fchrysoulas/MK-Scene-Gallery",
+  "manifest": "https://github.com/fchrysoulas/MK-Scene-Gallery/releases/latest/download/module.json",
+  "download": "https://github.com/fchrysoulas/MK-Scene-Gallery/releases/download/v0.7.0/mk-scene-gallery.zip"
 }

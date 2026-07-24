@@ -1,6 +1,11 @@
-import { MODULE_ID } from "./settings.js";
+import { DEFAULT_GRID_SIZE_MAX, MODULE_ID } from "./settings.js";
 import { indexImages, getCachedIndex, clearIndexCache } from "./fileIndex.js";
-import { openShareMediaPopout } from "./share.js";
+import { scaleAmbientLightRadiiForGrid } from "./lighting.js";
+import {
+  displayImageOnTokenLayer,
+  getTokenLayerImage,
+  removeImageFromTokenLayer
+} from "./tokenLayer.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -46,8 +51,11 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-search": async function () {
         this._clearSearch();
       },
-      "share-file": async function (event, target) {
-        await this._shareFile(event, target);
+      "add-to-token-layer": async function (event, target) {
+        await this._addToTokenLayer(event, target);
+      },
+      "remove-token-layer-image": async function (event, target) {
+        await this._removeTokenLayerImage(event, target);
       }
     }
   };
@@ -110,11 +118,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this.render({ force });
   }
 
-  _resetIndexState() {
+  _resetIndexState({ activeFolder = "" } = {}) {
     this.page = 0;
     this.selected.clear();
     this._openFolders.clear();
-    this._activeFolder = "";
+    this._activeFolder = activeFolder;
+    if (activeFolder) this._openFolderAncestors(activeFolder);
 
     this.files = [];
     this.total = 0;
@@ -248,14 +257,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     });
   }
 
-  _getShareMediaFlag(tile, key) {
-    if (typeof tile?.getFlag === "function") {
-      return tile.getFlag("share-media", key);
-    }
-
-    return tile?.flags?.["share-media"]?.[key];
-  }
-
   _getSelectedScene() {
     return game.scenes?.viewed
       ?? game.scenes?.current
@@ -263,6 +264,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ?? globalThis.canvas?.scene
       ?? game.scenes?.active
       ?? null;
+  }
+
+  _getGridSizeMax() {
+    const configured = Number(game.settings.get(MODULE_ID, "gridSizeMax"));
+    if (!Number.isFinite(configured) || configured < 50) return DEFAULT_GRID_SIZE_MAX;
+    return Math.max(50, Math.round(configured / 25) * 25);
   }
 
   _getVisibleSceneBounds(scene) {
@@ -319,6 +326,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _prepareSceneData() {
     const scene = this._getSelectedScene();
+    const gridSizeMax = this._getGridSizeMax();
 
     if (!scene) {
       return {
@@ -327,28 +335,23 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         gridSize: "—",
         gridSizeValue: 50,
         gridSizeMin: 50,
-        gridSizeMax: 500,
+        gridSizeMax,
         gridSizeStep: 25,
         gridDisabled: true,
         gridTitle: "Select or view a scene to change its grid size",
-        boundingTileId: "",
+        tokenLayerRemoveDisabled: true,
+        tokenLayerRemoveTitle: "Open a scene before removing its Token Layer image",
         fixDisabled: true,
         fixTitle: "Select or view a scene to fix its bounds",
         lockViewBounds: { available: false }
       };
     }
 
-    const tiles = Array.from(scene.tiles ?? []);
-    const isEnabled = (value) => value === true || value === 1 || value === "true";
-    const boundingTile = tiles.find((tile) => isEnabled(this._getShareMediaFlag(tile, "isBounding")))
-      ?? tiles.find((tile) => isEnabled(this._getShareMediaFlag(tile, "enabled")))
-      ?? null;
-
     const gridSize = scene.grid?.size ?? scene.dimensions?.size;
     const numericGridSize = Number(gridSize) || 100;
-    const gridSizeMax = Math.max(500, Math.ceil(numericGridSize / 25) * 25);
+    const gridSizeValue = Math.min(gridSizeMax, Math.max(50, numericGridSize));
     const canEdit = scene.isOwner ?? !!game.user?.isGM;
-    const boundingTileName = this._getShareMediaFlag(boundingTile, "name") || "bounding tile";
+    const tokenLayerImage = getTokenLayerImage(scene);
     const lockViewDrawing = this._getLockViewBoundingDrawing(scene);
     const drawingAnchor = lockViewDrawing
       ? this._getDrawingAnchor(scene, lockViewDrawing)
@@ -365,7 +368,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       id: scene.id,
       name: scene.name || "Untitled scene",
       gridSize: this._formatSceneNumber(gridSize),
-      gridSizeValue: numericGridSize,
+      gridSizeValue,
       gridSizeMin: 50,
       gridSizeMax,
       gridSizeStep: 25,
@@ -373,17 +376,18 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       gridTitle: canEdit
         ? `Change ${scene.name || "selected Scene"} grid size`
         : `You cannot edit ${scene.name || "the selected Scene"}`,
-      boundingTileId: boundingTile?.id ?? "",
-      fixDisabled: !canEdit || (!boundingTile && !lockViewDrawing),
+      tokenLayerRemoveDisabled: !canEdit || !tokenLayerImage?.path,
+      tokenLayerRemoveTitle: !canEdit
+        ? `You cannot edit ${scene.name || "the selected Scene"}`
+        : tokenLayerImage?.path
+          ? `Remove ${tokenLayerImage.name || "the current image"} from the Token Layer`
+          : "The active scene has no Token Layer image",
+      fixDisabled: !canEdit || !lockViewDrawing,
       fixTitle: !canEdit
         ? `You cannot edit ${scene.name || "the selected Scene"}`
-        : boundingTile && lockViewDrawing
-          ? `Fit ${boundingTileName} and anchor the Lock View Bounding Box`
-          : boundingTile
-            ? `Fit ${boundingTileName} to the selected Scene`
-            : lockViewDrawing
-              ? "Anchor the Lock View Bounding Box to the selected Scene"
-              : "No bounds were found on the selected Scene",
+        : lockViewDrawing
+          ? "Anchor the Lock View Bounding Box to the selected Scene"
+          : "No Lock View Bounding Box was found on the selected Scene",
       lockViewBounds: {
         available: !!lockViewDrawing,
         drawingId: lockViewDrawing?.id ?? "",
@@ -504,7 +508,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     sortNode(root);
 
-    if (!this._activeFolder || !nodeMap.has(this._activeFolder)) {
+    if (!this._activeFolder || (this._indexed && !nodeMap.has(this._activeFolder))) {
       this._activeFolder = root.fullPath;
     }
 
@@ -611,11 +615,22 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
       thumb.addEventListener("click", (event) => this._onThumbClick(event));
+      thumb.addEventListener("contextmenu", (event) => this._openImagePreview(event));
       thumb.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      this._onThumbClick(event);
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        this._onThumbClick(event);
       });
+    });
+
+    const previewDialog = root.querySelector("[data-role='image-preview']");
+    previewDialog?.querySelector("[data-role='image-preview-close']")
+      ?.addEventListener("click", () => this._closeImagePreview(previewDialog));
+    previewDialog?.addEventListener("click", (event) => {
+      if (event.target === previewDialog) this._closeImagePreview(previewDialog);
+    });
+    previewDialog?.addEventListener("close", () => {
+      previewDialog.querySelector("[data-role='image-preview-image']")?.removeAttribute("src");
     });
 
     root.querySelectorAll(".mg-thumb img").forEach((image) => image.addEventListener("error", (event) => {
@@ -761,14 +776,27 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const requested = Number(input.value);
     if (!Number.isFinite(requested)) return;
 
-    const gridSize = Math.max(50, Math.round(requested / 25) * 25);
+    const gridSizeMax = this._getGridSizeMax();
+    const gridSize = Math.min(gridSizeMax, Math.max(50, Math.round(requested / 25) * 25));
+    const previousGridSize = Number(scene.grid?.size ?? scene.dimensions?.size);
+    if (!Number.isFinite(previousGridSize) || previousGridSize <= 0) {
+      ui.notifications.error("The current Scene grid size is invalid.");
+      return;
+    }
+    if (gridSize === previousGridSize) return;
+
     input.disabled = true;
 
     try {
       await scene.update({ "grid.size": gridSize });
+      await scaleAmbientLightRadiiForGrid(scene, previousGridSize, gridSize);
+      ui.notifications.info(
+        `Grid size changed to ${gridSize} px. Ambient Light positions and pixel coverage were preserved.`
+      );
     } catch (error) {
       console.error(`${MODULE_ID} | Could not update Scene grid size`, error);
-      ui.notifications.error("Could not update the Scene grid size.");
+      ui.notifications.error("Could not update the Scene grid size and Ambient Light radii.");
+    } finally {
       input.disabled = false;
     }
   }
@@ -828,21 +856,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const bounds = this._getVisibleSceneBounds(scene);
     const operations = [];
 
-    const tileId = target.dataset?.tileId;
-    if (tileId) {
-      const tile = scene.tiles?.get?.(tileId)
-        ?? Array.from(scene.tiles ?? []).find((candidate) => candidate.id === tileId);
-      if (tile) {
-        operations.push(() => tile.update({
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-          rotation: 0
-        }));
-      }
-    }
-
     const select = this.element?.querySelector?.("[data-role='lockview-anchor']");
     const drawingId = select?.dataset?.drawingId;
     const anchor = select?.value;
@@ -895,7 +908,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  async _shareFile(event, target = event.currentTarget) {
+  async _addToTokenLayer(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
 
@@ -905,7 +918,19 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
-    await openShareMediaPopout(path);
+    await displayImageOnTokenLayer(path);
+  }
+
+  async _removeTokenLayerImage(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target) target.disabled = true;
+    try {
+      await removeImageFromTokenLayer();
+    } finally {
+      this._safeRender(false);
+    }
   }
 
   async _pickFolder() {
@@ -974,23 +999,33 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       this._safeRender(false);
 
       let uploaded = 0;
+      let uploadError = null;
 
       try {
         for (const file of files) {
           await this._uploadOneFile(uploadDir, file);
           uploaded += 1;
         }
-
-        ui.notifications.info(`Uploaded ${uploaded} image${uploaded === 1 ? "" : "s"}.`);
-        clearIndexCache();
-        this._resetIndexState();
-        this._safeRender(false);
       } catch (error) {
+        uploadError = error;
         console.error(`${MODULE_ID} | Upload failed`, error);
-        ui.notifications.error(`Image upload failed: ${error?.message ?? error}`);
       } finally {
+        if (uploaded > 0) {
+          clearIndexCache();
+          this._resetIndexState({ activeFolder: uploadDir });
+        }
+
         this._isUploading = false;
         this._safeRender(false);
+      }
+
+      if (uploadError) {
+        const progress = uploaded
+          ? `Uploaded ${uploaded} of ${files.length} images before the failure. `
+          : "";
+        ui.notifications.error(`${progress}Image upload failed: ${uploadError?.message ?? uploadError}`);
+      } else {
+        ui.notifications.info(`Uploaded ${uploaded} image${uploaded === 1 ? "" : "s"}.`);
       }
     }, { once: true });
 
@@ -1009,6 +1044,43 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   _loadMore() {
     this.page += 1;
     this._safeRender(false);
+  }
+
+  _openImagePreview(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const thumb = event.currentTarget;
+    const sourceImage = thumb?.querySelector?.(".mg-img");
+    const dialog = this.element?.querySelector?.("[data-role='image-preview']");
+    const previewImage = dialog?.querySelector?.("[data-role='image-preview-image']");
+    if (!sourceImage || !dialog || !previewImage) return;
+
+    const path = thumb.dataset?.path || sourceImage.currentSrc || sourceImage.src;
+    const label = sourceImage.alt || String(path).split("/").pop() || "Image preview";
+    previewImage.src = sourceImage.currentSrc || sourceImage.src;
+    previewImage.alt = label;
+
+    const title = dialog.querySelector("[data-role='image-preview-title']");
+    const pathElement = dialog.querySelector("[data-role='image-preview-path']");
+    if (title) title.textContent = label;
+    if (pathElement) {
+      pathElement.textContent = path;
+      pathElement.title = path;
+    }
+
+    if (dialog.open) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }
+
+  _closeImagePreview(dialog = this.element?.querySelector?.("[data-role='image-preview']")) {
+    if (!dialog) return;
+    if (dialog.open && typeof dialog.close === "function") dialog.close();
+    else {
+      dialog.removeAttribute("open");
+      dialog.querySelector("[data-role='image-preview-image']")?.removeAttribute("src");
+    }
   }
 
   _onThumbClick(event) {

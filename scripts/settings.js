@@ -1,11 +1,13 @@
 export const MODULE_ID = "mk-scene-gallery";
 export const LEGACY_MODULE_ID = "share-media-gallery";
+export const DEFAULT_GRID_SIZE_MAX = 300;
 
 const DEFAULTS = {
   baseDir: "uploads/",
   recursive: true,
   pageSize: 120,
-  pinnedFolders: []
+  pinnedFolders: [],
+  gridSizeMax: DEFAULT_GRID_SIZE_MAX
 };
 
 export function registerSettings() {
@@ -43,6 +45,20 @@ export function registerSettings() {
     config: false,
     type: Array,
     default: DEFAULTS.pinnedFolders
+  });
+
+  game.settings.register(MODULE_ID, "gridSizeMax", {
+    name: "Maximum grid slider size",
+    hint: "The maximum Scene grid size, in pixels, available in the gallery slider.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: DEFAULTS.gridSizeMax,
+    range: {
+      min: 50,
+      max: 1000,
+      step: 25
+    }
   });
 
   game.settings.register(MODULE_ID, "legacyMigrationComplete", {

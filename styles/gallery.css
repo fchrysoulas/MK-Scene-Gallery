@@ -122,6 +122,12 @@
   gap: 8px;
 }
 
+.mg-toolbar-actions > button {
+  width: 36px;
+  min-width: 36px;
+  padding-inline: 0;
+}
+
 .mg-toolbar button,
 .mg-content-footer button {
   width: auto;
@@ -167,6 +173,13 @@
 .mg-toolbar button[data-action="add-image"]:hover {
   background:
     linear-gradient(180deg, rgba(221, 168, 91, 0.35), rgba(221, 168, 91, 0.19));
+}
+
+.mg-toolbar button:disabled,
+.mg-toolbar button:disabled:hover {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .mg-toolbar-grid {
@@ -1099,6 +1112,96 @@
   font-size: 12px;
   font-weight: 600;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.mg-image-preview {
+  width: min(92vw, 1600px);
+  height: 90vh;
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(221, 168, 91, 0.42);
+  border-radius: 12px;
+  background: rgba(7, 10, 16, 0.98);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.72);
+  color: var(--mg-text);
+}
+
+.mg-image-preview::backdrop {
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(5px);
+}
+
+.mg-image-preview-frame {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.mg-image-preview-header {
+  min-height: 54px;
+  flex: 0 0 auto;
+  padding: 8px 10px 8px 16px;
+  border-bottom: 1px solid var(--mg-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(15, 20, 30, 0.96);
+}
+
+.mg-image-preview-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mg-image-preview-heading strong,
+.mg-image-preview-heading span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mg-image-preview-heading strong {
+  font-size: 14px;
+}
+
+.mg-image-preview-heading span {
+  color: var(--mg-faint);
+  font-size: 10px;
+}
+
+.mg-image-preview-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.mg-image-preview-canvas {
+  min-height: 0;
+  flex: 1 1 auto;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.045), transparent 58%),
+    #05070b;
+}
+
+.mg-image-preview-canvas img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 12px 46px rgba(0, 0, 0, 0.5);
 }
 
 .mg-tree-scroll::-webkit-scrollbar,

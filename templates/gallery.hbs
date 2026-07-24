@@ -1,19 +1,45 @@
 <div class="mg-wrap">
   <header class="mg-toolbar">
     <div class="mg-toolbar-actions" aria-label="Gallery actions">
-      <button type="button" data-action="pick-folder">
+      <button
+        type="button"
+        data-action="pick-folder"
+        title="Choose which Foundry data folder to browse"
+        aria-label="Choose gallery folder"
+      >
         <i class="fas fa-folder-open" aria-hidden="true"></i>
-        <span>Choose folder</span>
+        <span class="sr-only">Choose folder</span>
       </button>
 
-      <button type="button" data-action="add-image">
+      <button
+        type="button"
+        data-action="add-image"
+        title="Upload images to the selected folder"
+        aria-label="Add images"
+      >
         <i class="fas fa-upload" aria-hidden="true"></i>
-        <span>Add images</span>
+        <span class="sr-only">Add images</span>
       </button>
 
-      <button type="button" data-action="refresh-gallery" title="Rebuild the gallery index">
+      <button
+        type="button"
+        data-action="remove-token-layer-image"
+        title="{{sceneData.tokenLayerRemoveTitle}}"
+        aria-label="Remove scene image"
+        {{#if sceneData.tokenLayerRemoveDisabled}}disabled{{/if}}
+      >
+        <i class="fas fa-eraser" aria-hidden="true"></i>
+        <span class="sr-only">Remove scene image</span>
+      </button>
+
+      <button
+        type="button"
+        data-action="refresh-gallery"
+        title="Rebuild the gallery index"
+        aria-label="Refresh gallery"
+      >
         <i class="fas fa-rotate-right" aria-hidden="true"></i>
-        <span>Refresh</span>
+        <span class="sr-only">Refresh</span>
       </button>
 
       <label
@@ -42,12 +68,12 @@
         type="button"
         class="mg-toolbar-fix"
         data-action="fix-bounds"
-        data-tile-id="{{sceneData.boundingTileId}}"
         title="{{sceneData.fixTitle}}"
+        aria-label="Fix scene bounds"
         {{#if sceneData.fixDisabled}}disabled{{/if}}
       >
         <i class="fas fa-crosshairs" aria-hidden="true"></i>
-        <span>Fix Bounds</span>
+        <span class="sr-only">Fix Bounds</span>
       </button>
 
       {{#if sceneData.lockViewBounds.available}}
@@ -262,12 +288,12 @@
                 <button
                   type="button"
                   class="mg-action"
-                  data-action="share-file"
+                  data-action="add-to-token-layer"
                   data-path="{{path}}"
-                  title="Share in Share Media"
-                  aria-label="Share {{label}} in Share Media"
+                  title="Display on the Token Layer"
+                  aria-label="Display {{label}} on the Token Layer"
                 >
-                  <i class="fas fa-share" aria-hidden="true"></i>
+                  <i class="fas fa-layer-group" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -312,4 +338,27 @@
       </footer>
     </main>
   </div>
+
+  <dialog class="mg-image-preview" data-role="image-preview" aria-labelledby="mg-image-preview-title">
+    <div class="mg-image-preview-frame">
+      <header class="mg-image-preview-header">
+        <div class="mg-image-preview-heading">
+          <strong id="mg-image-preview-title" data-role="image-preview-title">Image preview</strong>
+          <span data-role="image-preview-path"></span>
+        </div>
+        <button
+          type="button"
+          class="mg-image-preview-close"
+          data-role="image-preview-close"
+          aria-label="Close image preview"
+          title="Close preview"
+        >
+          <i class="fas fa-xmark" aria-hidden="true"></i>
+        </button>
+      </header>
+      <div class="mg-image-preview-canvas">
+        <img data-role="image-preview-image" alt="">
+      </div>
+    </div>
+  </dialog>
 </div>
