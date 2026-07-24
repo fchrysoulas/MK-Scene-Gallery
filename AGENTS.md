@@ -18,6 +18,7 @@ repository. Source files are loaded directly by Foundry.
 - `scripts/lighting.js`: Ambient Light scaling for Scene grid-size changes.
 - `scripts/settings.js`: Module settings and legacy setting migration.
 - `scripts/tokenLayer.js`: Scene Token Layer image renderer.
+- `scripts/transitions.js`: Token Layer fade transition timing and animation.
 - `templates/gallery.hbs`: Handlebars application template.
 - `styles/gallery.css`: Gallery styles.
 
@@ -48,11 +49,18 @@ node --check scripts/fileIndex.js
 node --check scripts/lighting.js
 node --check scripts/settings.js
 node --check scripts/tokenLayer.js
+node --check scripts/transitions.js
 node -e "JSON.parse(require('fs').readFileSync('module.json', 'utf8'))"
 git diff --check
 ```
 
 For UI or Foundry API changes, also test manually in Foundry VTT v12 or v13.
+
+## Local testing
+
+After every source change, sync the affected module files to
+`%LOCALAPPDATA%\FoundryVTT\Data\modules\mk-scene-gallery` and test the result at
+`http://192.168.1.69:30000/`.
 
 ## Versioning and releases
 

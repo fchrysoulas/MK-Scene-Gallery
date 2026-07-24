@@ -1,4 +1,8 @@
-import { DEFAULT_GRID_SIZE_MAX, MODULE_ID } from "./settings.js";
+import {
+  DEFAULT_GRID_SIZE_MAX,
+  DEFAULT_IMAGE_TITLE_FONT_SIZE,
+  MODULE_ID
+} from "./settings.js";
 import { indexImages, getCachedIndex, clearIndexCache } from "./fileIndex.js";
 import { scaleAmbientLightRadiiForGrid } from "./lighting.js";
 import {
@@ -51,6 +55,15 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-search": async function () {
         this._clearSearch();
       },
+      "edit-image-title": async function (event, target) {
+        this._editImageTitle(event, target);
+      },
+      "save-image-title": async function (event, target) {
+        await this._saveImageTitle(event, target);
+      },
+      "cancel-image-title": async function (event, target) {
+        this._cancelImageTitle(event, target);
+      },
       "add-to-token-layer": async function (event, target) {
         await this._addToTokenLayer(event, target);
       },
@@ -93,6 +106,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     );
     this._searchRenderTimer = null;
     this._restoreSearchFocus = false;
+    this._editingTitlePath = "";
+    this._restoreTitleFocus = false;
     this._sceneHookIds = [];
 
     this._indexRunId = 0;
@@ -270,6 +285,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const configured = Number(game.settings.get(MODULE_ID, "gridSizeMax"));
     if (!Number.isFinite(configured) || configured < 50) return DEFAULT_GRID_SIZE_MAX;
     return Math.max(50, Math.round(configured / 25) * 25);
+  }
+
+  _getImageTitleFontSize() {
+    const configured = Number(game.settings.get(MODULE_ID, "imageTitleFontSize"));
+    if (!Number.isFinite(configured)) return DEFAULT_IMAGE_TITLE_FONT_SIZE;
+    return Math.min(24, Math.max(8, Math.round(configured)));
   }
 
   _getVisibleSceneBounds(scene) {
@@ -519,14 +540,31 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _getFileObjects() {
+    const savedTitles = game.settings.get(MODULE_ID, "imageTitles");
+    const imageTitles = savedTitles && typeof savedTitles === "object" && !Array.isArray(savedTitles)
+      ? savedTitles
+      : {};
+
     return (this.files || []).map((path) => {
-      const label = String(path).split("/").pop() || String(path);
+      const fileName = String(path).split("/").pop() || String(path);
+      const customTitle = typeof imageTitles[path] === "string"
+        ? imageTitles[path].trim()
+        : "";
+      const label = customTitle || fileName;
       const url = this._toServedUrl(path);
       const fullPath = String(path);
       const lastSlash = fullPath.lastIndexOf("/");
       const folder = lastSlash >= 0 ? fullPath.slice(0, lastSlash + 1) : "";
 
-      return { path, url, label, folder };
+      return {
+        path,
+        url,
+        label,
+        fileName,
+        customTitle,
+        folder,
+        isEditingTitle: this._editingTitlePath === path
+      };
     });
   }
 
@@ -571,6 +609,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       baseDir,
       recursive,
+      imageTitleFontSize: this._getImageTitleFontSize(),
       filter: this.filter,
       totalIndexed: this.total,
       totalFiltered: filtered.length,
@@ -623,6 +662,20 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
+    root.querySelectorAll("[data-role='image-title-input']").forEach((input) => {
+      input.addEventListener("click", (event) => event.stopPropagation());
+      input.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          this._saveImageTitle(event, input);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          this._cancelImageTitle(event, input);
+        }
+      });
+    });
+
     const previewDialog = root.querySelector("[data-role='image-preview']");
     previewDialog?.querySelector("[data-role='image-preview-close']")
       ?.addEventListener("click", () => this._closeImagePreview(previewDialog));
@@ -651,6 +704,15 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         search.focus();
         const end = search.value.length;
         search.setSelectionRange(end, end);
+      }
+    }
+
+    if (this._restoreTitleFocus) {
+      this._restoreTitleFocus = false;
+      const titleInput = root.querySelector("[data-role='image-title-input']");
+      if (titleInput) {
+        titleInput.focus();
+        titleInput.select();
       }
     }
   }
@@ -908,6 +970,61 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
+  _editImageTitle(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const path = target?.dataset?.path;
+    if (!path) return;
+
+    this._editingTitlePath = path;
+    this._restoreTitleFocus = true;
+    this._safeRender(false);
+  }
+
+  _cancelImageTitle(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    this._editingTitlePath = "";
+    this._restoreTitleFocus = false;
+    this._safeRender(false);
+  }
+
+  async _saveImageTitle(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const thumb = target?.closest?.(".mg-thumb");
+    const path = target?.dataset?.path || thumb?.dataset?.path;
+    const input = thumb?.querySelector?.("[data-role='image-title-input']");
+    if (!path || !input) return;
+
+    const title = input.value.trim();
+    const savedTitles = game.settings.get(MODULE_ID, "imageTitles");
+    const nextTitles = savedTitles && typeof savedTitles === "object" && !Array.isArray(savedTitles)
+      ? { ...savedTitles }
+      : {};
+
+    if (title) nextTitles[path] = title;
+    else delete nextTitles[path];
+
+    input.disabled = true;
+
+    try {
+      await game.settings.set(MODULE_ID, "imageTitles", nextTitles);
+      this._editingTitlePath = "";
+      this._restoreTitleFocus = false;
+      ui.notifications.info(title ? "Image title saved." : "Image title cleared.");
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not save image title`, error);
+      ui.notifications.error("Could not save the image title.");
+      this._restoreTitleFocus = true;
+    } finally {
+      this._safeRender(false);
+    }
+  }
+
   async _addToTokenLayer(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
@@ -918,7 +1035,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       return;
     }
 
-    await displayImageOnTokenLayer(path);
+    await displayImageOnTokenLayer(path, target?.dataset?.title);
   }
 
   async _removeTokenLayerImage(event, target = event.currentTarget) {

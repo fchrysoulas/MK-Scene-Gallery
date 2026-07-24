@@ -1,4 +1,8 @@
 import { MODULE_ID } from "./settings.js";
+import {
+  animateAlpha,
+  getTokenLayerTransitionDuration
+} from "./transitions.js";
 
 const FLAG_KEY = "tokenLayerImage";
 const locallyUpdatedScenes = new Set();
@@ -127,11 +131,16 @@ class SceneGalleryTokenLayerRenderer {
     this.sortScheduled = false;
   }
 
-  async draw(scene = getActiveScene(), { throwOnError = false, notifyOnError = true } = {}) {
-    this.destroy();
-    const generation = this.drawGeneration;
+  async draw(scene = getActiveScene(), {
+    throwOnError = false,
+    notifyOnError = true,
+    animate = true
+  } = {}) {
+    const generation = ++this.drawGeneration;
+    const transitionDuration = animate ? getTokenLayerTransitionDuration() : 0;
 
     if (!scene || !canvas?.ready || !globalThis.PIXI) {
+      this.destroy();
       const error = new Error("The Foundry canvas is not ready.");
       if (throwOnError) throw error;
       return false;
@@ -139,6 +148,24 @@ class SceneGalleryTokenLayerRenderer {
 
     const image = scene.getFlag(MODULE_ID, FLAG_KEY);
     if (!image?.path) {
+      const previousRoot = this.root;
+      const previousTexturePath = this.texturePath;
+      if (previousRoot) {
+        await animateAlpha(
+          previousRoot,
+          0,
+          transitionDuration,
+          () => generation === this.drawGeneration
+        );
+        if (generation !== this.drawGeneration) return false;
+        unpinTexture(previousTexturePath);
+        destroyDisplayObject(previousRoot);
+        if (this.root === previousRoot) {
+          this.root = null;
+          this.sceneId = null;
+          this.texturePath = "";
+        }
+      }
       await expireUnusedTextures();
       return false;
     }
@@ -158,6 +185,8 @@ class SceneGalleryTokenLayerRenderer {
       height: dimensions?.sceneHeight ?? scene.height
     };
 
+    let nextRoot = null;
+
     try {
       const texture = await createTexture(image.path);
       if (generation !== this.drawGeneration) {
@@ -167,14 +196,15 @@ class SceneGalleryTokenLayerRenderer {
       }
       if (!texture) throw new Error(`Texture loading returned no image for ${image.path}.`);
 
-      const root = new PIXI.Container();
-      root.name = `${MODULE_ID}.token-layer`;
-      root.alpha = Number.isFinite(Number(image.opacity)) ? Number(image.opacity) : 1;
-      root.elevation = 0;
-      root.sortLayer = Number(primary.constructor?.SORT_LAYERS?.TOKENS ?? 700);
-      root.sort = Number.MIN_SAFE_INTEGER;
-      root.zIndex = root.sortLayer;
-      disableInteraction(root);
+      const targetAlpha = Number.isFinite(Number(image.opacity)) ? Number(image.opacity) : 1;
+      nextRoot = new PIXI.Container();
+      nextRoot.name = `${MODULE_ID}.token-layer`;
+      nextRoot.alpha = transitionDuration > 0 ? 0 : targetAlpha;
+      nextRoot.elevation = 0;
+      nextRoot.sortLayer = Number(primary.constructor?.SORT_LAYERS?.TOKENS ?? 700);
+      nextRoot.sort = Number.MIN_SAFE_INTEGER;
+      nextRoot.zIndex = nextRoot.sortLayer;
+      disableInteraction(nextRoot);
 
       const sprite = createSprite(texture);
       const textureSize = getTextureSize(texture, sceneRect.width, sceneRect.height);
@@ -191,19 +221,54 @@ class SceneGalleryTokenLayerRenderer {
       );
       disableInteraction(sprite);
 
-      root.addChild(sprite);
-      primary.addChild(root);
+      nextRoot.addChild(sprite);
+
+      const previousRoot = this.root;
+      const previousTexturePath = this.texturePath;
+
+      primary.addChild(nextRoot);
       primary.sortChildren?.();
       primary.renderDirty = true;
 
-      this.root = root;
+      this.root = nextRoot;
       this.sceneId = scene.id;
       this.texturePath = image.path;
       pinTexture(this.texturePath);
       this.ensureTokenArtworkAboveImage();
+
+      if (previousRoot) {
+        await Promise.all([
+          animateAlpha(
+            previousRoot,
+            0,
+            transitionDuration,
+            () => generation === this.drawGeneration
+          ),
+          animateAlpha(
+            nextRoot,
+            targetAlpha,
+            transitionDuration,
+            () => generation === this.drawGeneration
+          )
+        ]);
+
+        if (previousTexturePath !== image.path) unpinTexture(previousTexturePath);
+        destroyDisplayObject(previousRoot);
+      } else {
+        await animateAlpha(
+          nextRoot,
+          targetAlpha,
+          transitionDuration,
+          () => generation === this.drawGeneration
+        );
+      }
+
+      if (generation !== this.drawGeneration) return false;
+
       await expireUnusedTextures(this.texturePath);
       return true;
     } catch (error) {
+      if (nextRoot && nextRoot !== this.root) destroyDisplayObject(nextRoot);
       console.error(`${MODULE_ID} | Could not render Token Layer image`, error);
       if (throwOnError) throw error;
       if (notifyOnError && game.user?.isGM) {
@@ -260,7 +325,7 @@ export function getTokenLayerImage(scene = getActiveScene()) {
   return scene?.getFlag?.(MODULE_ID, FLAG_KEY) ?? null;
 }
 
-async function performDisplayImageOnTokenLayer(path) {
+async function performDisplayImageOnTokenLayer(path, title = "") {
   const scene = getActiveScene();
   if (!scene) {
     ui.notifications.warn("Open a scene before displaying an image on its Token Layer.");
@@ -274,7 +339,7 @@ async function performDisplayImageOnTokenLayer(path) {
 
   const image = {
     path,
-    name: getImageLabel(path),
+    name: String(title || "").trim() || getImageLabel(path),
     opacity: 1
   };
   const previousImage = getTokenLayerImage(scene);
@@ -287,7 +352,6 @@ async function performDisplayImageOnTokenLayer(path) {
     );
     flagUpdated = true;
     await tokenLayerRenderer.draw(scene, { throwOnError: true });
-    ui.notifications.info(`Displayed ${image.name} on the Token Layer.`);
     return true;
   } catch (error) {
     if (flagUpdated) {
@@ -310,8 +374,8 @@ async function performDisplayImageOnTokenLayer(path) {
   }
 }
 
-export function displayImageOnTokenLayer(path) {
-  return enqueueTokenLayerMutation(() => performDisplayImageOnTokenLayer(path));
+export function displayImageOnTokenLayer(path, title = "") {
+  return enqueueTokenLayerMutation(() => performDisplayImageOnTokenLayer(path, title));
 }
 
 async function performRemoveImageFromTokenLayer() {
@@ -337,8 +401,7 @@ async function performRemoveImageFromTokenLayer() {
       scene,
       () => scene.unsetFlag(MODULE_ID, FLAG_KEY)
     );
-    tokenLayerRenderer.destroy();
-    await expireUnusedTextures();
+    await tokenLayerRenderer.draw(scene);
     ui.notifications.info(`Removed ${image.name || getImageLabel(image.path)} from the Token Layer.`);
     return true;
   } catch (error) {

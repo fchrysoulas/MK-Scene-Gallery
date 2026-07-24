@@ -9,7 +9,10 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 - Optionally include subfolders.
 - Browse images in folder groups.
 - Right-click a thumbnail to open a large image preview.
+- Set a custom, searchable title for any image from its thumbnail.
+- Configure the image-title font size in Module Settings.
 - Display an image on the active scene's Token Layer.
+- Crossfade between Token Layer images with a configurable transition duration.
 - Remove the current Token Layer image from the gallery toolbar.
 - Configure the maximum Scene grid slider size in Module Settings (300 px by default).
 - Keep Ambient Light centers and rendered pixel coverage fixed while inversely adjusting their configured radii for Scene grid-size changes.
@@ -22,9 +25,10 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 2. Open the left Scene Controls toolbar.
 3. Under the Token controls, click **MK-Scene-Gallery**.
 4. Pick a folder if needed.
-5. Hover an image and click its Layer button to display it on the active
+5. Hover an image and click its pencil button to set or clear a custom title.
+6. Hover an image and click its Layer button to display it on the active
    scene's Token Layer.
-6. Click **Remove scene image** to clear it from the scene.
+7. Click **Remove scene image** to clear it from the scene.
 
 ## Rename and settings migration
 This package replaces the former `share-media-gallery` module ID with `mk-scene-gallery`.

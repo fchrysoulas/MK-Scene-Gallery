@@ -1,12 +1,17 @@
 export const MODULE_ID = "mk-scene-gallery";
 export const LEGACY_MODULE_ID = "share-media-gallery";
 export const DEFAULT_GRID_SIZE_MAX = 300;
+export const DEFAULT_IMAGE_TITLE_FONT_SIZE = 10;
+export const DEFAULT_TOKEN_LAYER_TRANSITION_MS = 500;
 
 const DEFAULTS = {
   baseDir: "uploads/",
   recursive: true,
   pageSize: 120,
   pinnedFolders: [],
+  imageTitles: {},
+  imageTitleFontSize: DEFAULT_IMAGE_TITLE_FONT_SIZE,
+  tokenLayerTransitionMs: DEFAULT_TOKEN_LAYER_TRANSITION_MS,
   gridSizeMax: DEFAULT_GRID_SIZE_MAX
 };
 
@@ -45,6 +50,43 @@ export function registerSettings() {
     config: false,
     type: Array,
     default: DEFAULTS.pinnedFolders
+  });
+
+  game.settings.register(MODULE_ID, "imageTitles", {
+    name: "Image titles",
+    hint: "Custom gallery titles keyed by image path.",
+    scope: "world",
+    config: false,
+    type: Object,
+    default: DEFAULTS.imageTitles
+  });
+
+  game.settings.register(MODULE_ID, "imageTitleFontSize", {
+    name: "Image title font size",
+    hint: "Font size, in pixels, used for image titles in the gallery.",
+    scope: "client",
+    config: true,
+    type: Number,
+    default: DEFAULTS.imageTitleFontSize,
+    range: {
+      min: 8,
+      max: 24,
+      step: 1
+    }
+  });
+
+  game.settings.register(MODULE_ID, "tokenLayerTransitionMs", {
+    name: "Token Layer crossfade duration",
+    hint: "Crossfade duration in milliseconds when changing images. Set to 0 to disable.",
+    scope: "client",
+    config: true,
+    type: Number,
+    default: DEFAULTS.tokenLayerTransitionMs,
+    range: {
+      min: 0,
+      max: 3000,
+      step: 100
+    }
   });
 
   game.settings.register(MODULE_ID, "gridSizeMax", {

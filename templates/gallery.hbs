@@ -1,4 +1,4 @@
-<div class="mg-wrap">
+<div class="mg-wrap mg-title-size-{{imageTitleFontSize}}">
   <header class="mg-toolbar">
     <div class="mg-toolbar-actions" aria-label="Gallery actions">
       <button
@@ -288,8 +288,19 @@
                 <button
                   type="button"
                   class="mg-action"
+                  data-action="edit-image-title"
+                  data-path="{{path}}"
+                  title="Edit image title"
+                  aria-label="Edit title for {{label}}"
+                >
+                  <i class="fas fa-pen" aria-hidden="true"></i>
+                </button>
+                <button
+                  type="button"
+                  class="mg-action"
                   data-action="add-to-token-layer"
                   data-path="{{path}}"
+                  data-title="{{label}}"
                   title="Display on the Token Layer"
                   aria-label="Display {{label}} on the Token Layer"
                 >
@@ -297,7 +308,39 @@
                 </button>
               </div>
             </div>
-            <div class="mg-name" title="{{label}}">{{label}}</div>
+            {{#if isEditingTitle}}
+              <div class="mg-title-editor">
+                <input
+                  type="text"
+                  value="{{customTitle}}"
+                  placeholder="{{fileName}}"
+                  data-role="image-title-input"
+                  data-path="{{path}}"
+                  aria-label="Image title"
+                  maxlength="200"
+                >
+                <button
+                  type="button"
+                  data-action="save-image-title"
+                  data-path="{{path}}"
+                  title="Save title"
+                  aria-label="Save image title"
+                >
+                  <i class="fas fa-check" aria-hidden="true"></i>
+                </button>
+                <button
+                  type="button"
+                  data-action="cancel-image-title"
+                  data-path="{{path}}"
+                  title="Cancel"
+                  aria-label="Cancel title editing"
+                >
+                  <i class="fas fa-xmark" aria-hidden="true"></i>
+                </button>
+              </div>
+            {{else}}
+              <div class="mg-name" title="{{label}}">{{label}}</div>
+            {{/if}}
           </article>
         {{/inline}}
 

@@ -956,6 +956,7 @@
   position: absolute;
   inset: auto 7px 7px 7px;
   display: flex;
+  gap: 6px;
   justify-content: flex-end;
   opacity: 0;
   transform: translateY(5px);
@@ -1012,14 +1013,64 @@
   color: var(--mg-muted);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: var(--mg-image-title-font-size, 10px);
   font-weight: 550;
   line-height: 1.35;
 }
 
+.mg-title-size-8 { --mg-image-title-font-size: 8px; }
+.mg-title-size-9 { --mg-image-title-font-size: 9px; }
+.mg-title-size-10 { --mg-image-title-font-size: 10px; }
+.mg-title-size-11 { --mg-image-title-font-size: 11px; }
+.mg-title-size-12 { --mg-image-title-font-size: 12px; }
+.mg-title-size-13 { --mg-image-title-font-size: 13px; }
+.mg-title-size-14 { --mg-image-title-font-size: 14px; }
+.mg-title-size-15 { --mg-image-title-font-size: 15px; }
+.mg-title-size-16 { --mg-image-title-font-size: 16px; }
+.mg-title-size-17 { --mg-image-title-font-size: 17px; }
+.mg-title-size-18 { --mg-image-title-font-size: 18px; }
+.mg-title-size-19 { --mg-image-title-font-size: 19px; }
+.mg-title-size-20 { --mg-image-title-font-size: 20px; }
+.mg-title-size-21 { --mg-image-title-font-size: 21px; }
+.mg-title-size-22 { --mg-image-title-font-size: 22px; }
+.mg-title-size-23 { --mg-image-title-font-size: 23px; }
+.mg-title-size-24 { --mg-image-title-font-size: 24px; }
+
 .mg-thumb:hover .mg-name,
 .mg-thumb.is-selected .mg-name {
   color: var(--mg-text);
+}
+
+.mg-title-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 25px 25px;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.mg-title-editor input {
+  width: 100%;
+  min-width: 0;
+  height: 25px;
+  padding: 2px 6px;
+  border: 1px solid var(--mg-accent-border);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--mg-text);
+  font-size: 10px;
+}
+
+.mg-title-editor button {
+  width: 25px;
+  min-width: 25px;
+  height: 25px;
+  min-height: 25px;
+  margin: 0;
+  padding: 0;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
 }
 
 .mg-empty {
