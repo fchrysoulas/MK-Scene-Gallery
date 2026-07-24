@@ -958,6 +958,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ui.notifications.warn("Pick a folder first.");
       return;
     }
+    const uploadDir = this._activeFolder || baseDir;
 
     const input = document.createElement("input");
     input.type = "file";
@@ -969,14 +970,14 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!files.length) return;
 
       this._isUploading = true;
-      ui.notifications.info(`Uploading ${files.length} image${files.length === 1 ? "" : "s"} to ${baseDir}`);
+      ui.notifications.info(`Uploading ${files.length} image${files.length === 1 ? "" : "s"} to ${uploadDir}`);
       this._safeRender(false);
 
       let uploaded = 0;
 
       try {
         for (const file of files) {
-          await this._uploadOneFile(baseDir, file);
+          await this._uploadOneFile(uploadDir, file);
           uploaded += 1;
         }
 
