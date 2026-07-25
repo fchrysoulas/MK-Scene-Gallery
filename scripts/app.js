@@ -623,10 +623,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       const fullPath = String(path);
       const lastSlash = fullPath.lastIndexOf("/");
       const folder = lastSlash >= 0 ? fullPath.slice(0, lastSlash + 1) : "";
+      const isVideo = /\.webm$/i.test(fileName);
 
       return {
         path,
         url,
+        isVideo,
         label,
         fileName,
         customTitle,
@@ -852,6 +854,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
     root.querySelector("[data-role='lockview-anchor']")
       ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
+    this._bindLinkedContentControls(root);
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
       thumb.addEventListener("contextmenu", (event) => this._openImageDetailsWindow(event));
@@ -863,11 +866,11 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
-    root.querySelectorAll(".mg-thumb img").forEach((image) => image.addEventListener("error", (event) => {
-      const img = event.currentTarget;
-      const thumb = img.closest(".mg-thumb");
+    root.querySelectorAll(".mg-thumb .mg-img").forEach((media) => media.addEventListener("error", (event) => {
+      const failedMedia = event.currentTarget;
+      const thumb = failedMedia.closest(".mg-thumb");
       if (thumb) thumb.classList.add("is-missing");
-      img.style.display = "none";
+      failedMedia.style.display = "none";
     }));
 
     if (!this._initialIndexScheduled && !this._indexed && !this.loading && !this._indexPromise) {
@@ -1156,6 +1159,42 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
+  _syncLinkedContentForm(form) {
+    if (!form) return;
+
+    const backgroundColor = form.elements?.backgroundColor;
+    const useBackgroundColor = form.elements?.useBackgroundColor;
+    if (backgroundColor && useBackgroundColor) {
+      backgroundColor.disabled = !useBackgroundColor.checked;
+    }
+
+    const journal = form.elements?.journal;
+    const openJournal = form.elements?.openJournal;
+    if (journal && openJournal) {
+      const available = !!journal.value && journal.value !== KEEP_CURRENT;
+      openJournal.disabled = !available;
+      if (!available) openJournal.checked = false;
+    }
+
+    const playlistSound = form.elements?.playlistSoundLink;
+    const startPlaylistSound = form.elements?.startPlaylistSound;
+    if (playlistSound && startPlaylistSound) {
+      const available = !!playlistSound.value && playlistSound.value !== KEEP_CURRENT;
+      startPlaylistSound.disabled = !available;
+      if (!available) startPlaylistSound.checked = false;
+    }
+  }
+
+  _bindLinkedContentControls(root = this.element) {
+    root?.querySelectorAll?.("[data-role='image-details-form']").forEach((form) => {
+      const sync = () => this._syncLinkedContentForm(form);
+      form.elements?.useBackgroundColor?.addEventListener("change", sync);
+      form.elements?.journal?.addEventListener("change", sync);
+      form.elements?.playlistSoundLink?.addEventListener("change", sync);
+      sync();
+    });
+  }
+
   _selectQuickFilter(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
@@ -1234,6 +1273,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!scene || !form) return;
 
     const preset = captureScenePreset(scene, { gridSizeMax: this._getGridSizeMax() });
+    const prepared = prepareScenePresetForm(preset, { gridSizeMax: this._getGridSizeMax() });
     const setValue = (name, value) => {
       const field = form.elements?.[name];
       if (field) field.value = value ?? "";
@@ -1242,10 +1282,68 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const [name, value] of Object.entries(preset)) {
       if (name === "weather") {
         setValue(name, value === null ? KEEP_CURRENT : value);
+      } else if (name === "journal") {
+        setValue(name, value === null ? KEEP_CURRENT : value);
+      } else if ([
+        "playlist",
+        "playlistSound",
+        "openJournal",
+        "startPlaylistSound"
+      ].includes(name)) {
+        continue;
       } else if (name === "initialScale") {
         setValue(name, value === null ? null : value.toFixed(2));
       } else {
         setValue(name, value);
+      }
+    }
+    setValue("playlistSoundLink", prepared.playlistSoundLink);
+    setValue("backgroundColor", prepared.backgroundColorValue);
+    const openJournal = form.elements?.openJournal;
+    const startPlaylistSound = form.elements?.startPlaylistSound;
+    const useBackgroundColor = form.elements?.useBackgroundColor;
+    if (openJournal) openJournal.checked = false;
+    if (startPlaylistSound) startPlaylistSound.checked = false;
+    if (useBackgroundColor) useBackgroundColor.checked = prepared.backgroundColorEnabled;
+    this._syncLinkedContentForm(form);
+  }
+
+  async _runLinkedContentActions(image) {
+    const preset = image?.scenePreset;
+    if (!preset) return;
+
+    if (preset.openJournal && preset.journal) {
+      try {
+        const journal = game.journal?.get?.(preset.journal);
+        if (!journal) throw new Error(`Journal ${preset.journal} was not found.`);
+        const sheet = journal.sheet;
+        if (!sheet?.render) throw new Error(`Journal ${journal.name || preset.journal} has no sheet.`);
+        await sheet.render(true);
+      } catch (error) {
+        console.error(`${MODULE_ID} | Could not open linked Journal`, error);
+        ui.notifications.warn("The linked Journal could not be opened.");
+      }
+    }
+
+    if (preset.startPlaylistSound && preset.playlist) {
+      try {
+        const playlist = game.playlists?.get?.(preset.playlist);
+        if (!playlist) throw new Error(`Playlist ${preset.playlist} was not found.`);
+
+        if (preset.playlistSound) {
+          const sound = playlist.sounds?.get?.(preset.playlistSound);
+          if (!sound) {
+            throw new Error(
+              `Playlist Sound ${preset.playlistSound} was not found in ${playlist.name || preset.playlist}.`
+            );
+          }
+          await playlist.playSound(sound);
+        } else {
+          await playlist.playAll();
+        }
+      } catch (error) {
+        console.error(`${MODULE_ID} | Could not start linked Playlist audio`, error);
+        ui.notifications.warn("The linked Playlist audio could not be started.");
       }
     }
   }
@@ -1375,6 +1473,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     await this._recordRecentlyDisplayed(path);
     if (!image?.scenePreset) return;
+    await this._runLinkedContentActions(image);
 
     const activeCanvas = globalThis.canvas;
     if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return;
@@ -1452,7 +1551,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = "image/*,video/webm,.webm";
     input.multiple = true;
 
     input.addEventListener("change", async () => {
@@ -1460,7 +1559,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!files.length) return;
 
       this._isUploading = true;
-      ui.notifications.info(`Uploading ${files.length} image${files.length === 1 ? "" : "s"} to ${uploadDir}`);
+      ui.notifications.info(`Uploading ${files.length} media file${files.length === 1 ? "" : "s"} to ${uploadDir}`);
       this._safeRender(false);
 
       let uploaded = 0;
@@ -1486,11 +1585,11 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
       if (uploadError) {
         const progress = uploaded
-          ? `Uploaded ${uploaded} of ${files.length} images before the failure. `
+          ? `Uploaded ${uploaded} of ${files.length} files before the failure. `
           : "";
-        ui.notifications.error(`${progress}Image upload failed: ${uploadError?.message ?? uploadError}`);
+        ui.notifications.error(`${progress}Media upload failed: ${uploadError?.message ?? uploadError}`);
       } else {
-        ui.notifications.info(`Uploaded ${uploaded} image${uploaded === 1 ? "" : "s"}.`);
+        ui.notifications.info(`Uploaded ${uploaded} media file${uploaded === 1 ? "" : "s"}.`);
       }
     }, { once: true });
 

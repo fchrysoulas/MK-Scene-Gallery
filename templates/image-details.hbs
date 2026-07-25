@@ -9,11 +9,25 @@
     </div>
 
     <div class="mg-image-details-scroll">
-      <img
-        class="mg-image-details-preview"
-        src="{{selectedImage.url}}"
-        alt="{{selectedImage.label}}"
-      >
+      {{#if selectedImage.isVideo}}
+        <video
+          class="mg-image-details-preview mg-video"
+          src="{{selectedImage.url}}"
+          aria-label="{{selectedImage.label}}"
+          autoplay
+          muted
+          loop
+          playsinline
+          controls
+          preload="metadata"
+        ></video>
+      {{else}}
+        <img
+          class="mg-image-details-preview"
+          src="{{selectedImage.url}}"
+          alt="{{selectedImage.label}}"
+        >
+      {{/if}}
 
       <form
         class="mg-inspector-form"
@@ -212,16 +226,80 @@
             <label class="is-full">
               <span>Background color</span>
               <input
-                type="text"
+                type="color"
                 name="backgroundColor"
-                value="{{selectedImage.scenePresetForm.backgroundColor}}"
-                pattern="#[0-9a-fA-F]{6}"
-                placeholder="#000000"
+                value="{{selectedImage.scenePresetForm.backgroundColorValue}}"
+                {{#unless selectedImage.scenePresetForm.backgroundColorEnabled}}disabled{{/unless}}
               >
+            </label>
+
+            <label class="is-full mg-linked-action">
+              <input
+                type="checkbox"
+                name="useBackgroundColor"
+                value="true"
+                {{#if selectedImage.scenePresetForm.backgroundColorEnabled}}checked{{/if}}
+              >
+              <span class="mg-linked-toggle" aria-hidden="true"></span>
+              <span class="mg-linked-action-text">Set background color when displayed</span>
             </label>
           </div>
           <small class="mg-preset-warning">
             Changing Scene padding can reposition placed canvas elements.
+          </small>
+        </details>
+
+        <details class="mg-preset-section">
+          <summary>Journal & Audio</summary>
+          <div class="mg-preset-fields">
+            <label class="is-full">
+              <span>Journal entry</span>
+              <select name="journal">
+                {{#each selectedImage.scenePresetForm.journalOptions as |option|}}
+                  <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
+                    {{option.label}}
+                  </option>
+                {{/each}}
+              </select>
+            </label>
+
+            <label class="is-full mg-linked-action">
+              <input
+                type="checkbox"
+                name="openJournal"
+                value="true"
+                {{#if selectedImage.scenePresetForm.openJournal}}checked{{/if}}
+                {{#if selectedImage.scenePresetForm.journalActionDisabled}}disabled{{/if}}
+              >
+              <span class="mg-linked-toggle" aria-hidden="true"></span>
+              <span class="mg-linked-action-text">Open Journal when displayed</span>
+            </label>
+
+            <label class="is-full">
+              <span>Playlist sound</span>
+              <select name="playlistSoundLink">
+                {{#each selectedImage.scenePresetForm.playlistSoundOptions as |option|}}
+                  <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
+                    {{option.label}}
+                  </option>
+                {{/each}}
+              </select>
+            </label>
+
+            <label class="is-full mg-linked-action">
+              <input
+                type="checkbox"
+                name="startPlaylistSound"
+                value="true"
+                {{#if selectedImage.scenePresetForm.startPlaylistSound}}checked{{/if}}
+                {{#if selectedImage.scenePresetForm.playlistActionDisabled}}disabled{{/if}}
+              >
+              <span class="mg-linked-toggle" aria-hidden="true"></span>
+              <span class="mg-linked-action-text">Start audio when displayed</span>
+            </label>
+          </div>
+          <small class="mg-linked-note">
+            Associations are saved to the active Scene before optional Journal or audio actions run.
           </small>
         </details>
 

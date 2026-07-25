@@ -41,10 +41,23 @@ function stringOrNull(value) {
   return string || null;
 }
 
+function associationOrNull(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "object") {
+    const id = value.id ?? value._id;
+    return id ? String(id) : null;
+  }
+  return String(value).trim();
+}
+
 function booleanOrNull(value) {
   if (value === true || value === "true") return true;
   if (value === false || value === "false") return false;
   return null;
+}
+
+function enabledOrNull(value) {
+  return value === true || value === "true" ? true : null;
 }
 
 function colorOrNull(value) {
@@ -84,6 +97,11 @@ export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}
     fogExploration: booleanOrNull(preset.fogExploration),
     weather,
     padding: clampOrNull(preset.padding, 0, 0.5),
+    journal: associationOrNull(preset.journal),
+    playlist: associationOrNull(preset.playlist),
+    playlistSound: associationOrNull(preset.playlistSound),
+    openJournal: enabledOrNull(preset.openJournal),
+    startPlaylistSound: enabledOrNull(preset.startPlaylistSound),
     initialX: floorOrNull(preset.initialX),
     initialY: floorOrNull(preset.initialY),
     initialScale: roundOrNull(clampOrNull(preset.initialScale, 0.1, 3), 2)
@@ -103,9 +121,22 @@ function option(value, label, selectedValue) {
   };
 }
 
+function collectionContents(collection) {
+  if (Array.isArray(collection?.contents)) return collection.contents;
+  return collection ? Array.from(collection) : [];
+}
+
+function playlistSoundLink(playlistId, soundId) {
+  if (playlistId === null && soundId === null) return KEEP_CURRENT;
+  if (!playlistId) return "";
+  return `${playlistId}:${soundId || ""}`;
+}
+
 export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
   const preset = normalizeScenePreset(rawPreset, { gridSizeMax });
   const weatherSelection = preset.weather === null ? KEEP_CURRENT : preset.weather;
+  const journalSelection = preset.journal === null ? KEEP_CURRENT : preset.journal;
+  const selectedPlaylistSoundLink = playlistSoundLink(preset.playlist, preset.playlistSound);
   const weatherEffects = globalThis.CONFIG?.weatherEffects ?? {};
   const weatherEntries = Object.entries(weatherEffects)
     .map(([key, config]) => {
@@ -115,10 +146,85 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
       return { value, label };
     })
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+  const journals = collectionContents(globalThis.game?.journal)
+    .filter((journal) => journal?.id)
+    .sort((a, b) => String(a.name || "").localeCompare(
+      String(b.name || ""),
+      undefined,
+      { sensitivity: "base" }
+    ));
+  const journalOptions = [
+    option(KEEP_CURRENT, "Keep current", journalSelection),
+    option("", "None", journalSelection),
+    ...journals.map((journal) => option(journal.id, journal.name, journalSelection))
+  ];
+  if (
+    journalSelection
+    && journalSelection !== KEEP_CURRENT
+    && !journals.some((journal) => journal.id === journalSelection)
+  ) {
+    journalOptions.push(option(
+      journalSelection,
+      `Missing Journal (${journalSelection})`,
+      journalSelection
+    ));
+  }
+
+  const playlists = collectionContents(globalThis.game?.playlists)
+    .filter((playlist) => playlist?.id)
+    .sort((a, b) => String(a.name || "").localeCompare(
+      String(b.name || ""),
+      undefined,
+      { sensitivity: "base" }
+    ));
+  const playlistSoundOptions = [
+    option(KEEP_CURRENT, "Keep current", selectedPlaylistSoundLink),
+    option("", "None", selectedPlaylistSoundLink)
+  ];
+  for (const playlist of playlists) {
+    playlistSoundOptions.push(option(
+      playlistSoundLink(playlist.id, ""),
+      `${playlist.name} — Entire playlist`,
+      selectedPlaylistSoundLink
+    ));
+
+    const sounds = collectionContents(playlist.sounds)
+      .filter((sound) => sound?.id)
+      .sort((a, b) => String(a.name || "").localeCompare(
+        String(b.name || ""),
+        undefined,
+        { sensitivity: "base" }
+      ));
+    for (const sound of sounds) {
+      playlistSoundOptions.push(option(
+        playlistSoundLink(playlist.id, sound.id),
+        `${playlist.name} — ${sound.name}`,
+        selectedPlaylistSoundLink
+      ));
+    }
+  }
+  if (
+    selectedPlaylistSoundLink
+    && selectedPlaylistSoundLink !== KEEP_CURRENT
+    && !playlistSoundOptions.some((entry) => entry.value === selectedPlaylistSoundLink)
+  ) {
+    playlistSoundOptions.push(option(
+      selectedPlaylistSoundLink,
+      `Missing Playlist Sound (${selectedPlaylistSoundLink})`,
+      selectedPlaylistSoundLink
+    ));
+  }
 
   return {
     ...preset,
+    backgroundColorValue: preset.backgroundColor ?? "#000000",
+    backgroundColorEnabled: preset.backgroundColor !== null,
     initialScale: preset.initialScale === null ? null : preset.initialScale.toFixed(2),
+    journalOptions,
+    journalActionDisabled: !preset.journal,
+    playlistSoundLink: selectedPlaylistSoundLink,
+    playlistSoundOptions,
+    playlistActionDisabled: !preset.playlist,
     gridTypeOptions: [
       option("", "Keep current", preset.gridType === null ? "" : preset.gridType),
       ...GRID_TYPES.map((entry) => option(entry.value, entry.label, preset.gridType))
@@ -143,7 +249,22 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
 
 export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
   const value = (name) => form?.elements?.[name]?.value ?? "";
+  const checked = (name) => form?.elements?.[name]?.checked === true;
   const weatherValue = value("weather");
+  const journalValue = value("journal");
+  const linkedSoundValue = value("playlistSoundLink");
+  let playlist = null;
+  let playlistSound = null;
+  if (linkedSoundValue !== KEEP_CURRENT) {
+    if (!linkedSoundValue) {
+      playlist = "";
+      playlistSound = "";
+    } else {
+      const separator = linkedSoundValue.indexOf(":");
+      playlist = separator >= 0 ? linkedSoundValue.slice(0, separator) : linkedSoundValue;
+      playlistSound = separator >= 0 ? linkedSoundValue.slice(separator + 1) : "";
+    }
+  }
 
   return normalizeScenePreset({
     gridSize: value("gridSize"),
@@ -152,12 +273,19 @@ export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
     gridAlpha: value("gridAlpha"),
     gridDistance: value("gridDistance"),
     gridUnits: value("gridUnits"),
-    backgroundColor: value("backgroundColor"),
+    backgroundColor: checked("useBackgroundColor") ? value("backgroundColor") : "",
     darkness: value("darkness"),
     tokenVision: value("tokenVision"),
     fogExploration: value("fogExploration"),
     weather: weatherValue === KEEP_CURRENT ? null : weatherValue,
     padding: value("padding"),
+    journal: journalValue === KEEP_CURRENT ? null : journalValue,
+    playlist,
+    playlistSound,
+    openJournal: checked("openJournal") && journalValue && journalValue !== KEEP_CURRENT,
+    startPlaylistSound: checked("startPlaylistSound")
+      && linkedSoundValue
+      && linkedSoundValue !== KEEP_CURRENT,
     initialX: value("initialX"),
     initialY: value("initialY"),
     initialScale: value("initialScale")
@@ -193,6 +321,11 @@ export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
       : scene?.fogExploration,
     weather: scene?.weather ?? "",
     padding: scene?.padding,
+    journal: scene?.journal ?? "",
+    playlist: scene?.playlist ?? "",
+    playlistSound: scene?.playlistSound ?? "",
+    openJournal: null,
+    startPlaylistSound: null,
     initialX: currentView.x ?? initial.x,
     initialY: currentView.y ?? initial.y,
     initialScale: currentView.scale ?? initial.scale
@@ -223,6 +356,9 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
   const isV13 = Number(game.release?.generation) >= 13;
   assign(isV13 ? "environment.darknessLevel" : "darkness", preset.darkness);
   assign(isV13 ? "fog.exploration" : "fogExploration", preset.fogExploration);
+  if (preset.journal !== null) update.journal = preset.journal || null;
+  if (preset.playlist !== null) update.playlist = preset.playlist || null;
+  if (preset.playlistSound !== null) update.playlistSound = preset.playlistSound || null;
 
   if (Object.keys(update).length === 0) {
     return { changed: false, gridChanged: false, preset };

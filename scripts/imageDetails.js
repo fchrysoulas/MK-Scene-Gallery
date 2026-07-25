@@ -86,6 +86,7 @@ export class ImageDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.gallery?._bindLinkedContentControls(this.element);
 
     this.element?.querySelector?.("[data-role='image-details-form']")
       ?.addEventListener("submit", async (event) => {

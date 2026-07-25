@@ -1,7 +1,7 @@
 {
   "id": "mk-scene-gallery",
   "title": "MK-Scene-Gallery",
-  "description": "Browse scene and image folders as a thumbnail gallery, upload images, and display images on a scene Token Layer.",
+  "description": "Browse scene images and WebM videos as a thumbnail gallery and display them on a scene Token Layer.",
   "version": "0.10.0",
   "authors": [
     {

@@ -152,11 +152,40 @@ function getTextureSize(texture, fallbackWidth, fallbackHeight) {
   };
 }
 
+async function startSpriteVideo(sprite) {
+  const video = game.video?.getVideoSource?.(sprite) ?? null;
+  if (!video || typeof game.video?.play !== "function") return video;
+
+  try {
+    await game.video.play(video, {
+      playing: true,
+      loop: true,
+      volume: 0
+    });
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Could not start Token Layer video playback`, error);
+  }
+
+  return video;
+}
+
+function stopVideo(video) {
+  if (!video) return;
+
+  try {
+    if (typeof game.video?.stop === "function") game.video.stop(video);
+    else video.pause?.();
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Could not stop Token Layer video playback`, error);
+  }
+}
+
 class SceneGalleryTokenLayerRenderer {
   constructor() {
     this.root = null;
     this.sceneId = null;
     this.texturePath = "";
+    this.video = null;
     this.drawGeneration = 0;
     this.sortScheduled = false;
   }
@@ -191,6 +220,7 @@ class SceneGalleryTokenLayerRenderer {
     if (!image?.path) {
       const previousRoot = this.root;
       const previousTexturePath = this.texturePath;
+      const previousVideo = this.video;
       if (previousRoot) {
         await animateAlpha(
           previousRoot,
@@ -200,11 +230,13 @@ class SceneGalleryTokenLayerRenderer {
         );
         if (generation !== this.drawGeneration) return false;
         unpinTexture(previousTexturePath);
+        stopVideo(previousVideo);
         destroyDisplayObject(previousRoot);
         if (this.root === previousRoot) {
           this.root = null;
           this.sceneId = null;
           this.texturePath = "";
+          this.video = null;
         }
       }
       await expireUnusedTextures();
@@ -248,6 +280,7 @@ class SceneGalleryTokenLayerRenderer {
       disableInteraction(nextRoot);
 
       const sprite = createSprite(texture);
+      const nextVideo = await startSpriteVideo(sprite);
       const textureSize = getTextureSize(texture, sceneRect.width, sceneRect.height);
       const coverScale = Math.max(
         sceneRect.width / textureSize.width,
@@ -266,6 +299,7 @@ class SceneGalleryTokenLayerRenderer {
 
       const previousRoot = this.root;
       const previousTexturePath = this.texturePath;
+      const previousVideo = this.video;
 
       primary.addChild(nextRoot);
       primary.sortChildren?.();
@@ -274,6 +308,7 @@ class SceneGalleryTokenLayerRenderer {
       this.root = nextRoot;
       this.sceneId = scene.id;
       this.texturePath = image.path;
+      this.video = nextVideo;
       pinTexture(this.texturePath);
       this.ensureTokenArtworkAboveImage();
 
@@ -294,6 +329,7 @@ class SceneGalleryTokenLayerRenderer {
         ]);
 
         if (previousTexturePath !== image.path) unpinTexture(previousTexturePath);
+        if (previousVideo !== nextVideo) stopVideo(previousVideo);
         destroyDisplayObject(previousRoot);
       } else {
         await animateAlpha(
@@ -350,6 +386,7 @@ class SceneGalleryTokenLayerRenderer {
   destroy() {
     this.drawGeneration += 1;
     unpinTexture(this.texturePath);
+    stopVideo(this.video);
     const primary = canvas?.primary;
     const wasInPrimary = this.root?.parent === primary;
     destroyDisplayObject(this.root);
@@ -357,6 +394,7 @@ class SceneGalleryTokenLayerRenderer {
     this.root = null;
     this.sceneId = null;
     this.texturePath = "";
+    this.video = null;
   }
 }
 

@@ -1,6 +1,6 @@
 import { MODULE_ID } from "./settings.js";
 
-const IMG_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "avif", "svg"]);
+const MEDIA_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "webm"]);
 const cache = new Map();
 
 function normalizeDir(path) {
@@ -21,9 +21,9 @@ export function clearIndexCache() {
   cache.clear();
 }
 
-function isImagePath(path) {
+function isMediaPath(path) {
   const ext = (String(path).split(".").pop() || "").toLowerCase();
-  return IMG_EXT.has(ext);
+  return MEDIA_EXT.has(ext);
 }
 
 function withTimeout(promise, ms, label) {
@@ -120,7 +120,7 @@ export async function indexImages({
             const newFiles = [];
 
             for (const file of files) {
-              if (!isImagePath(file)) continue;
+              if (!isMediaPath(file)) continue;
               if (seenFiles.has(file)) continue;
 
               seenFiles.add(file);
