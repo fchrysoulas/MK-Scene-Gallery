@@ -18,8 +18,15 @@ import {
   prepareScenePresetForm,
   readScenePresetForm
 } from "./scenePresets.js";
+import { ImageDetailsApp } from "./imageDetails.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const MAX_RECENT_IMAGES = 50;
+
+function getGalleryWindowTitle() {
+  const version = globalThis.game?.modules?.get?.(MODULE_ID)?.version;
+  return version ? `MK-Scene-Gallery v${version}` : "MK-Scene-Gallery";
+}
 
 export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
@@ -30,7 +37,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       height: 720
     },
     window: {
-      title: "MK-Scene-Gallery",
+      title: getGalleryWindowTitle(),
       icon: "fas fa-images",
       resizable: true,
       minimizable: true
@@ -63,11 +70,20 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-search": async function () {
         this._clearSearch();
       },
-      "close-image-inspector": async function (event) {
-        this._closeImageInspector(event);
+      "select-quick-filter": async function (event, target) {
+        this._selectQuickFilter(event, target);
+      },
+      "select-tag-filter": async function (event, target) {
+        this._selectTagFilter(event, target);
+      },
+      "toggle-favorite": async function (event, target) {
+        await this._toggleFavorite(event, target);
       },
       "copy-scene-preset": async function (event, target) {
         this._copyCurrentScenePreset(event, target);
+      },
+      "clear-image-metadata": async function (event, target) {
+        await this._clearImageMetadata(event, target);
       },
       "add-to-token-layer": async function (event, target) {
         await this._addToTokenLayer(event, target);
@@ -90,7 +106,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this.files = [];
     this.filter = "";
-    this.selected = new Set();
+    this._quickFilter = "all";
+    this._tagFilter = "";
     this.page = 0;
 
     this.loading = false;
@@ -109,6 +126,18 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         ? savedPins.filter((path) => typeof path === "string" && path.length)
         : []
     );
+    const savedFavorites = game.settings.get(MODULE_ID, "favoriteImages");
+    this._favoriteImages = new Set(
+      Array.isArray(savedFavorites)
+        ? savedFavorites.filter((path) => typeof path === "string" && path.length)
+        : []
+    );
+    const savedRecents = game.settings.get(MODULE_ID, "recentImages");
+    this._recentImages = Array.isArray(savedRecents)
+      ? Array.from(new Set(
+        savedRecents.filter((path) => typeof path === "string" && path.length)
+      )).slice(0, MAX_RECENT_IMAGES)
+      : [];
     this._searchRenderTimer = null;
     this._restoreSearchFocus = false;
     this._sceneHookIds = [];
@@ -117,6 +146,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._isClosing = false;
     this._initialIndexScheduled = false;
     this._isUploading = false;
+    this._imageDetailsApp = null;
   }
 
   async close(options = {}) {
@@ -138,7 +168,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _resetIndexState({ activeFolder = "" } = {}) {
     this.page = 0;
-    this.selected.clear();
     this._openFolders.clear();
     this._activeFolder = activeFolder;
     if (activeFolder) this._openFolderAncestors(activeFolder);
@@ -561,6 +590,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         && !Array.isArray(imageMetadata[path])
         ? imageMetadata[path]
         : {};
+      const hasMetadata = Object.prototype.hasOwnProperty.call(imageMetadata, path)
+        || Object.prototype.hasOwnProperty.call(imageTitles, path);
       const hasMetadataTitle = Object.prototype.hasOwnProperty.call(metadata, "title");
       const customTitle = hasMetadataTitle
         ? String(metadata.title || "").trim()
@@ -570,6 +601,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       const description = typeof metadata.description === "string"
         ? metadata.description.trim()
         : "";
+      const tags = this._normalizeTags(metadata.tags);
       const rawScenePreset = metadata.scenePreset
         && typeof metadata.scenePreset === "object"
         && !Array.isArray(metadata.scenePreset)
@@ -599,8 +631,16 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         fileName,
         customTitle,
         description,
+        tags,
+        tagsText: tags.join(", "),
+        displayTags: tags.slice(0, 3),
+        extraTagCount: Math.max(0, tags.length - 3),
         gridSize,
         scenePreset,
+        hasMetadata,
+        hasScenePreset: hasScenePresetValues(scenePreset),
+        favorite: this._favoriteImages.has(path),
+        recentlyDisplayed: this._recentImages.includes(path),
         folder,
       };
     });
@@ -610,15 +650,34 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const pageSize = game.settings.get(MODULE_ID, "pageSize");
     const rootPath = this._normalizeBaseDir(baseDir);
     const query = (this.filter || "").trim().toLowerCase();
-    const inActiveFolder = fileObjs.filter((file) => {
-      if (!this._activeFolder || this._activeFolder === rootPath) return true;
-      return file.folder === this._activeFolder;
-    });
-    const filtered = inActiveFolder.filter((file) => {
+    let candidates;
+
+    if (this._quickFilter === "favorites") {
+      candidates = fileObjs.filter((file) => file.favorite);
+    } else if (this._quickFilter === "recent") {
+      const recentOrder = new Map(this._recentImages.map((path, index) => [path, index]));
+      candidates = fileObjs
+        .filter((file) => recentOrder.has(file.path))
+        .sort((a, b) => recentOrder.get(a.path) - recentOrder.get(b.path));
+    } else if (this._tagFilter) {
+      candidates = fileObjs;
+    } else {
+      candidates = fileObjs.filter((file) => {
+        if (!this._activeFolder || this._activeFolder === rootPath) return true;
+        return file.folder === this._activeFolder;
+      });
+    }
+
+    if (this._tagFilter) {
+      candidates = candidates.filter((file) => file.tags.includes(this._tagFilter));
+    }
+
+    const filtered = candidates.filter((file) => {
       if (!query) return true;
       return file.path.toLowerCase().includes(query)
         || file.label.toLowerCase().includes(query)
         || file.description.toLowerCase().includes(query)
+        || file.tags.some((tag) => tag.includes(query))
         || file.folder.toLowerCase().includes(query);
     });
 
@@ -626,6 +685,62 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const visible = filtered.slice(0, end);
 
     return { fileObjs, filtered, visible };
+  }
+
+  _normalizeTags(rawTags) {
+    const values = Array.isArray(rawTags)
+      ? rawTags
+      : String(rawTags || "").split(/[,;\n]/);
+    const normalized = [];
+    const seen = new Set();
+
+    for (const rawTag of values) {
+      const tag = String(rawTag || "").trim().toLowerCase().slice(0, 40);
+      if (!tag || seen.has(tag)) continue;
+      seen.add(tag);
+      normalized.push(tag);
+      if (normalized.length >= 30) break;
+    }
+
+    return normalized;
+  }
+
+  _getAvailableTags(fileObjs) {
+    const counts = new Map();
+    for (const file of fileObjs) {
+      for (const tag of file.tags) counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+
+    return Array.from(counts, ([tag, count]) => ({
+      tag,
+      count,
+      selected: tag === this._tagFilter
+    })).sort((a, b) => a.tag.localeCompare(b.tag, undefined, { sensitivity: "base" }));
+  }
+
+  _clearTreeSelection(node) {
+    if (!node) return;
+    node.selected = false;
+    for (const child of node.children || []) this._clearTreeSelection(child);
+  }
+
+  _getImageDetailsData(path, fileObjs = this._getFileObjects()) {
+    const selectedImage = path
+      ? fileObjs.find((file) => file.path === path) ?? null
+      : null;
+    if (selectedImage) {
+      selectedImage.scenePresetForm = prepareScenePresetForm(selectedImage.scenePreset, {
+        gridSizeMax: this._getGridSizeMax()
+      });
+    }
+
+    return {
+      selectedImage,
+      imageGridSizeMin: 50,
+      imageGridSizeMax: this._getGridSizeMax(),
+      imageGridSizeStep: 25,
+      selectedSceneAvailable: !!this._getSelectedScene()
+    };
   }
 
   getData() {
@@ -639,18 +754,52 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       .map((fullPath) => this._findTreeNode(tree, fullPath))
       .filter(Boolean)
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
+    const quickFilterActive = this._quickFilter !== "all";
+    if (quickFilterActive || this._tagFilter) this._clearTreeSelection(tree);
+    const availablePaths = new Set(fileObjs.map((file) => file.path));
+    const favoriteCount = fileObjs.filter((file) => file.favorite).length;
+    const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
+    const availableTags = this._getAvailableTags(fileObjs);
 
-    const selectedMap = {};
-    for (const path of this.selected) selectedMap[path] = true;
-
-    const selectedPath = this.selected.size ? Array.from(this.selected)[0] : "";
-    const selectedImage = selectedPath
-      ? fileObjs.find((file) => file.path === selectedPath) ?? null
-      : null;
-    if (selectedImage) {
-      selectedImage.scenePresetForm = prepareScenePresetForm(selectedImage.scenePreset, {
-        gridSizeMax: this._getGridSizeMax()
-      });
+    let activeFolderLabel;
+    let activeFolderPath;
+    if (this._quickFilter === "favorites") {
+      activeFolderLabel = this._tagFilter ? `Favorites · #${this._tagFilter}` : "Favorites";
+      activeFolderPath = "Favorite images from all indexed folders";
+    } else if (this._quickFilter === "recent") {
+      activeFolderLabel = this._tagFilter ? `Recently Displayed · #${this._tagFilter}` : "Recently Displayed";
+      activeFolderPath = "Most recently displayed images from all indexed folders";
+    } else if (this._tagFilter) {
+      activeFolderLabel = `#${this._tagFilter}`;
+      activeFolderPath = "Tagged images from all indexed folders";
+    } else {
+      activeFolderLabel = activeNode === tree ? "All media" : activeNode.label;
+      activeFolderPath = activeNode === tree
+        ? (this._normalizeBaseDir(baseDir)
+          ? `${this._normalizeBaseDir(baseDir)} (including subfolders)`
+          : "Choose a folder to begin")
+        : activeNode.fullPath;
+    }
+    const hasOrganizationFilter = quickFilterActive || !!this._tagFilter;
+    let emptyIcon = "fa-image";
+    let emptyTitle = "This folder is empty";
+    let emptyMessage = "Choose another folder or add images here.";
+    if (this.filter) {
+      emptyIcon = "fa-magnifying-glass";
+      emptyTitle = "No matching images";
+      emptyMessage = "Try a different search or clear the current one.";
+    } else if (this._quickFilter === "favorites") {
+      emptyIcon = "fa-star";
+      emptyTitle = "No favorite images";
+      emptyMessage = "Use the star on an image card to add it to Favorites.";
+    } else if (this._quickFilter === "recent") {
+      emptyIcon = "fa-clock-rotate-left";
+      emptyTitle = "No recently displayed images";
+      emptyMessage = "Images appear here after you display them on the Token Layer.";
+    } else if (this._tagFilter) {
+      emptyIcon = "fa-tag";
+      emptyTitle = `No images tagged #${this._tagFilter}`;
+      emptyMessage = "Choose another tag or edit an image's Scene Details.";
     }
 
     return {
@@ -667,23 +816,23 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       indexStats: this._indexStats,
       tree,
       pinnedFolders,
+      availableTags,
+      favoriteCount,
+      recentCount,
+      favoritesSelected: this._quickFilter === "favorites",
+      recentSelected: this._quickFilter === "recent",
+      quickFilterActive,
+      tagFilter: this._tagFilter,
+      hasOrganizationFilter,
+      emptyIcon,
+      emptyTitle,
+      emptyMessage,
+      searchPlaceholder: hasOrganizationFilter ? "Search this view" : "Search this folder",
       visibleFiles: visible,
-      activeFolderLabel: activeNode === tree ? "All media" : activeNode.label,
-      activeFolderPath: activeNode === tree
-        ? (this._normalizeBaseDir(baseDir)
-          ? `${this._normalizeBaseDir(baseDir)} (including subfolders)`
-          : "Choose a folder to begin")
-        : activeNode.fullPath,
+      activeFolderLabel,
+      activeFolderPath,
       sceneData: this._prepareSceneData(),
       singleFiltered: filtered.length === 1,
-      selectedCount: this.selected.size,
-      selectedMap,
-      selectedPath,
-      selectedImage,
-      imageGridSizeMin: 50,
-      imageGridSizeMax: this._getGridSizeMax(),
-      imageGridSizeStep: 25,
-      selectedSceneAvailable: !!this._getSelectedScene()
     };
   }
 
@@ -705,26 +854,13 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
-      thumb.addEventListener("click", (event) => this._onThumbClick(event));
-      thumb.addEventListener("contextmenu", (event) => this._openImagePreview(event));
+      thumb.addEventListener("contextmenu", (event) => this._openImageDetailsWindow(event));
       thumb.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
+        if (event.target?.closest?.("[data-action]")) return;
         event.preventDefault();
-        this._onThumbClick(event);
+        this._openImageDetailsWindow(event);
       });
-    });
-
-    root.querySelector("[data-role='image-details-form']")
-      ?.addEventListener("submit", (event) => this._saveImageDetails(event));
-
-    const previewDialog = root.querySelector("[data-role='image-preview']");
-    previewDialog?.querySelector("[data-role='image-preview-close']")
-      ?.addEventListener("click", () => this._closeImagePreview(previewDialog));
-    previewDialog?.addEventListener("click", (event) => {
-      if (event.target === previewDialog) this._closeImagePreview(previewDialog);
-    });
-    previewDialog?.addEventListener("close", () => {
-      previewDialog.querySelector("[data-role='image-preview-image']")?.removeAttribute("src");
     });
 
     root.querySelectorAll(".mg-thumb img").forEach((image) => image.addEventListener("error", (event) => {
@@ -811,9 +947,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (folder === undefined) return;
 
     this._activeFolder = folder;
+    this._quickFilter = "all";
+    this._tagFilter = "";
     this._openFolderAncestors(folder);
     this.page = 0;
-    this.selected.clear();
     this._safeRender(false);
   }
 
@@ -1019,12 +1156,73 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _closeImageInspector(event) {
+  _selectQuickFilter(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
 
-    this.selected.clear();
+    const filter = target?.dataset?.filter;
+    if (!["favorites", "recent"].includes(filter)) return;
+
+    this._quickFilter = this._quickFilter === filter ? "all" : filter;
+    this.page = 0;
     this._safeRender(false);
+  }
+
+  _selectTagFilter(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const tag = this._normalizeTags([target?.dataset?.tag])[0];
+    if (!tag) return;
+
+    this._tagFilter = this._tagFilter === tag ? "" : tag;
+    this.page = 0;
+    this._safeRender(false);
+  }
+
+  async _toggleFavorite(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const path = target?.dataset?.path;
+    if (!path) return;
+
+    const wasFavorite = this._favoriteImages.has(path);
+    if (wasFavorite) this._favoriteImages.delete(path);
+    else this._favoriteImages.add(path);
+
+    try {
+      await game.settings.set(MODULE_ID, "favoriteImages", Array.from(this._favoriteImages));
+      const label = target?.dataset?.title || String(path).split("/").pop() || "Image";
+      ui.notifications.info(
+        wasFavorite ? `Removed ${label} from Favorites.` : `Added ${label} to Favorites.`
+      );
+    } catch (error) {
+      if (wasFavorite) this._favoriteImages.add(path);
+      else this._favoriteImages.delete(path);
+      console.error(`${MODULE_ID} | Could not update Favorite image`, error);
+      ui.notifications.error("Could not update Favorites.");
+    } finally {
+      this._safeRender(false);
+    }
+  }
+
+  async _recordRecentlyDisplayed(path) {
+    const previous = [...this._recentImages];
+    this._recentImages = [
+      path,
+      ...this._recentImages.filter((recentPath) => recentPath !== path)
+    ].slice(0, MAX_RECENT_IMAGES);
+
+    try {
+      await game.settings.set(MODULE_ID, "recentImages", this._recentImages);
+    } catch (error) {
+      this._recentImages = previous;
+      console.error(`${MODULE_ID} | Could not update Recently Displayed images`, error);
+      ui.notifications.warn("Displayed the image, but could not update Recently Displayed.");
+    } finally {
+      this._safeRender(false);
+    }
   }
 
   _copyCurrentScenePreset(event, target = event.currentTarget) {
@@ -1044,9 +1242,53 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const [name, value] of Object.entries(preset)) {
       if (name === "weather") {
         setValue(name, value === null ? KEEP_CURRENT : value);
+      } else if (name === "initialScale") {
+        setValue(name, value === null ? null : value.toFixed(2));
       } else {
         setValue(name, value);
       }
+    }
+  }
+
+  async _clearImageMetadata(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const form = target?.closest?.("[data-role='image-details-form']");
+    const path = target?.dataset?.path || form?.dataset?.path;
+    if (!path) return;
+
+    const savedMetadata = game.settings.get(MODULE_ID, "imageMetadata");
+    const nextMetadata = savedMetadata
+      && typeof savedMetadata === "object"
+      && !Array.isArray(savedMetadata)
+      ? { ...savedMetadata }
+      : {};
+    const savedTitles = game.settings.get(MODULE_ID, "imageTitles");
+    const nextTitles = savedTitles
+      && typeof savedTitles === "object"
+      && !Array.isArray(savedTitles)
+      ? { ...savedTitles }
+      : {};
+    const hadMetadata = Object.prototype.hasOwnProperty.call(nextMetadata, path);
+    const hadLegacyTitle = Object.prototype.hasOwnProperty.call(nextTitles, path);
+
+    if (!hadMetadata && !hadLegacyTitle) return;
+
+    delete nextMetadata[path];
+    delete nextTitles[path];
+    if (target) target.disabled = true;
+
+    try {
+      if (hadMetadata) await game.settings.set(MODULE_ID, "imageMetadata", nextMetadata);
+      if (hadLegacyTitle) await game.settings.set(MODULE_ID, "imageTitles", nextTitles);
+      ui.notifications.info("Image metadata cleared.");
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not clear image metadata`, error);
+      ui.notifications.error("Could not clear the image metadata.");
+    } finally {
+      if (target) target.disabled = false;
+      this._safeRender(false);
     }
   }
 
@@ -1059,6 +1301,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const title = String(form.elements?.title?.value ?? "").trim();
     const description = String(form.elements?.description?.value ?? "").trim();
+    const tags = this._normalizeTags(form.elements?.tags?.value);
     const scenePreset = readScenePresetForm(form, {
       gridSizeMax: this._getGridSizeMax()
     });
@@ -1072,6 +1315,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     nextMetadata[path] = {
       title,
       description,
+      tags,
       gridSize: scenePreset.gridSize,
       scenePreset
     };
@@ -1081,6 +1325,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     try {
       await game.settings.set(MODULE_ID, "imageMetadata", nextMetadata);
+      ui.notifications.info("Image details saved.");
     } catch (error) {
       console.error(`${MODULE_ID} | Could not save image details`, error);
       ui.notifications.error("Could not save the image details.");
@@ -1126,7 +1371,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       path,
       image?.label || target?.dataset?.title
     );
-    if (!displayed || !image?.scenePreset) return;
+    if (!displayed) return;
+
+    await this._recordRecentlyDisplayed(path);
+    if (!image?.scenePreset) return;
 
     const activeCanvas = globalThis.canvas;
     if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return;
@@ -1263,57 +1511,36 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _openImagePreview(event) {
+  _openImageDetailsWindow(event) {
     event.preventDefault();
     event.stopPropagation();
-
-    const thumb = event.currentTarget;
-    const sourceImage = thumb?.querySelector?.(".mg-img");
-    const dialog = this.element?.querySelector?.("[data-role='image-preview']");
-    const previewImage = dialog?.querySelector?.("[data-role='image-preview-image']");
-    if (!sourceImage || !dialog || !previewImage) return;
-
-    const path = thumb.dataset?.path || sourceImage.currentSrc || sourceImage.src;
-    const label = sourceImage.alt || String(path).split("/").pop() || "Image preview";
-    previewImage.src = sourceImage.currentSrc || sourceImage.src;
-    previewImage.alt = label;
-
-    const title = dialog.querySelector("[data-role='image-preview-title']");
-    const pathElement = dialog.querySelector("[data-role='image-preview-path']");
-    if (title) title.textContent = label;
-    if (pathElement) {
-      pathElement.textContent = path;
-      pathElement.title = path;
-    }
-
-    if (dialog.open) return;
-    if (typeof dialog.showModal === "function") dialog.showModal();
-    else dialog.setAttribute("open", "");
-  }
-
-  _closeImagePreview(dialog = this.element?.querySelector?.("[data-role='image-preview']")) {
-    if (!dialog) return;
-    if (dialog.open && typeof dialog.close === "function") dialog.close();
-    else {
-      dialog.removeAttribute("open");
-      dialog.querySelector("[data-role='image-preview-image']")?.removeAttribute("src");
-    }
-  }
-
-  _onThumbClick(event) {
     if (event.target?.closest?.("[data-action]")) return;
 
-    const element = event.currentTarget;
-    const path = element?.dataset?.path;
+    const thumb = event.currentTarget;
+    const path = thumb?.dataset?.path;
     if (!path) return;
-
-    if (this.selected.has(path)) {
-      this.selected.clear();
-    } else {
-      this.selected.clear();
-      this.selected.add(path);
+    const image = this._getFileObjects().find((candidate) => candidate.path === path);
+    if (!image) {
+      console.error(`${MODULE_ID} | Could not open Scene Details for missing image`, { path });
+      ui.notifications.error("Could not open Scene Details for this image.");
+      return;
     }
 
-    this._safeRender(false);
+    if (!this._imageDetailsApp) {
+      this._imageDetailsApp = new ImageDetailsApp({
+        gallery: this,
+        path,
+        image
+      });
+    } else {
+      this._imageDetailsApp.setImagePath(path, image);
+    }
+
+    this._imageDetailsApp.render({ force: true });
   }
+
+  _releaseImageDetailsApp(application) {
+    if (this._imageDetailsApp === application) this._imageDetailsApp = null;
+  }
+
 }

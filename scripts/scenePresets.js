@@ -23,6 +23,18 @@ function clampOrNull(value, min, max) {
   return Math.min(max, Math.max(min, number));
 }
 
+function floorOrNull(value) {
+  const number = finiteOrNull(value);
+  return number === null ? null : Math.floor(number);
+}
+
+function roundOrNull(value, decimalPlaces) {
+  const number = finiteOrNull(value);
+  if (number === null) return null;
+  const factor = 10 ** decimalPlaces;
+  return Math.round((number + Number.EPSILON) * factor) / factor;
+}
+
 function stringOrNull(value) {
   if (value === null || value === undefined) return null;
   const string = String(value).trim();
@@ -72,9 +84,9 @@ export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}
     fogExploration: booleanOrNull(preset.fogExploration),
     weather,
     padding: clampOrNull(preset.padding, 0, 0.5),
-    initialX: finiteOrNull(preset.initialX),
-    initialY: finiteOrNull(preset.initialY),
-    initialScale: clampOrNull(preset.initialScale, 0.1, 3)
+    initialX: floorOrNull(preset.initialX),
+    initialY: floorOrNull(preset.initialY),
+    initialScale: roundOrNull(clampOrNull(preset.initialScale, 0.1, 3), 2)
   };
 }
 
@@ -106,6 +118,7 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
 
   return {
     ...preset,
+    initialScale: preset.initialScale === null ? null : preset.initialScale.toFixed(2),
     gridTypeOptions: [
       option("", "Keep current", preset.gridType === null ? "" : preset.gridType),
       ...GRID_TYPES.map((entry) => option(entry.value, entry.label, preset.gridType))

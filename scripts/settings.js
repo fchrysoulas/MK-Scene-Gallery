@@ -9,6 +9,8 @@ const DEFAULTS = {
   recursive: true,
   pageSize: 120,
   pinnedFolders: [],
+  favoriteImages: [],
+  recentImages: [],
   imageTitles: {},
   imageMetadata: {},
   imageTitleFontSize: DEFAULT_IMAGE_TITLE_FONT_SIZE,
@@ -53,6 +55,24 @@ export function registerSettings() {
     default: DEFAULTS.pinnedFolders
   });
 
+  game.settings.register(MODULE_ID, "favoriteImages", {
+    name: "Favorite gallery images",
+    hint: "Image paths marked as Favorites by this client.",
+    scope: "client",
+    config: false,
+    type: Array,
+    default: DEFAULTS.favoriteImages
+  });
+
+  game.settings.register(MODULE_ID, "recentImages", {
+    name: "Recently displayed gallery images",
+    hint: "Image paths most recently displayed on the Token Layer by this client.",
+    scope: "client",
+    config: false,
+    type: Array,
+    default: DEFAULTS.recentImages
+  });
+
   game.settings.register(MODULE_ID, "imageTitles", {
     name: "Image titles",
     hint: "Custom gallery titles keyed by image path.",
@@ -64,7 +84,7 @@ export function registerSettings() {
 
   game.settings.register(MODULE_ID, "imageMetadata", {
     name: "Image metadata",
-    hint: "Names, descriptions, and preferred Scene grid sizes keyed by image path.",
+    hint: "Names, descriptions, tags, and Scene presets keyed by image path.",
     scope: "world",
     config: false,
     type: Object,

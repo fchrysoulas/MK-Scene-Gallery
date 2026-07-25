@@ -104,7 +104,7 @@
     </label>
   </header>
 
-  <div class="mg-browser {{#if selectedImage}}has-inspector{{/if}}">
+  <div class="mg-browser">
     {{#if isIndexing}}
       <div class="mg-loading-overlay" aria-live="polite">
         <div class="mg-spinner" role="status" aria-label="Indexing media"></div>
@@ -173,13 +173,69 @@
       </li>
     {{/inline}}
 
-    <aside class="mg-sidebar" aria-label="Folder navigation">
+    <aside class="mg-sidebar" aria-label="Library navigation">
       <div class="mg-sidebar-heading">
         <span>Folders</span>
         <span class="mg-sidebar-total">{{totalIndexed}}</span>
       </div>
 
       <div class="mg-tree-scroll">
+        <section class="mg-quick-section" aria-label="Quick access">
+          <div class="mg-pinned-heading">
+            <span><i class="fas fa-bolt" aria-hidden="true"></i> Quick access</span>
+          </div>
+          <div class="mg-quick-list">
+            <button
+              type="button"
+              class="mg-quick-filter {{#if favoritesSelected}}is-active{{/if}}"
+              data-action="select-quick-filter"
+              data-filter="favorites"
+              aria-pressed="{{#if favoritesSelected}}true{{else}}false{{/if}}"
+            >
+              <i class="fas fa-star" aria-hidden="true"></i>
+              <span>Favorites</span>
+              <span class="mg-tree-count">{{favoriteCount}}</span>
+            </button>
+            <button
+              type="button"
+              class="mg-quick-filter {{#if recentSelected}}is-active{{/if}}"
+              data-action="select-quick-filter"
+              data-filter="recent"
+              aria-pressed="{{#if recentSelected}}true{{else}}false{{/if}}"
+            >
+              <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
+              <span>Recently Displayed</span>
+              <span class="mg-tree-count">{{recentCount}}</span>
+            </button>
+          </div>
+        </section>
+
+        {{#if availableTags.length}}
+          <section class="mg-tag-filter-section" aria-label="Image tags">
+            <div class="mg-pinned-heading">
+              <span><i class="fas fa-tags" aria-hidden="true"></i> Tags</span>
+              <span>{{availableTags.length}}</span>
+            </div>
+            <div class="mg-tag-filter-list">
+              {{#each availableTags as |entry|}}
+                <button
+                  type="button"
+                  class="mg-tag-filter {{#if entry.selected}}is-active{{/if}}"
+                  data-action="select-tag-filter"
+                  data-tag="{{entry.tag}}"
+                  title="Show images tagged {{entry.tag}}"
+                  aria-pressed="{{#if entry.selected}}true{{else}}false{{/if}}"
+                >
+                  <span>#{{entry.tag}}</span>
+                  <span>{{entry.count}}</span>
+                </button>
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+
+        <div class="mg-tree-divider" aria-hidden="true"></div>
+
         {{#if pinnedFolders.length}}
           <section class="mg-pinned-section" aria-label="Pinned folders">
             <div class="mg-pinned-heading">
@@ -262,7 +318,7 @@
           <input
             type="search"
             value="{{filter}}"
-            placeholder="Search this folder"
+            placeholder="{{searchPlaceholder}}"
             data-role="search"
             autocomplete="off"
           >
@@ -277,13 +333,34 @@
       <div class="mg-gallery-scroll">
         {{#*inline "thumbCard"}}
           <article
-            class="mg-thumb {{#if (lookup @root.selectedMap path)}}is-selected{{/if}}"
+            class="mg-thumb"
             data-path="{{path}}"
             title="{{path}}"
             tabindex="0"
           >
             <div class="mg-thumb-img">
               <img class="mg-img" src="{{url}}" alt="{{label}}" loading="lazy">
+              {{#if hasScenePreset}}
+                <span
+                  class="mg-scene-preset-indicator"
+                  title="Scene preset saved"
+                  aria-label="Scene preset saved"
+                >
+                  <i class="fas fa-map" aria-hidden="true"></i>
+                </span>
+              {{/if}}
+              <button
+                type="button"
+                class="mg-favorite-action {{#if favorite}}is-favorite{{/if}}"
+                data-action="toggle-favorite"
+                data-path="{{path}}"
+                data-title="{{label}}"
+                title="{{#if favorite}}Remove from Favorites{{else}}Add to Favorites{{/if}}"
+                aria-label="{{#if favorite}}Remove {{label}} from Favorites{{else}}Add {{label}} to Favorites{{/if}}"
+                aria-pressed="{{#if favorite}}true{{else}}false{{/if}}"
+              >
+                <i class="{{#if favorite}}fas{{else}}far{{/if}} fa-star" aria-hidden="true"></i>
+              </button>
               <div class="mg-hover-actions">
                 <button
                   type="button"
@@ -299,6 +376,12 @@
               </div>
             </div>
             <div class="mg-name" title="{{label}}">{{label}}</div>
+            {{#if tags.length}}
+              <div class="mg-card-tags" aria-label="Tags">
+                {{#each displayTags as |tag|}}<span>#{{tag}}</span>{{/each}}
+                {{#if extraTagCount}}<span>+{{extraTagCount}}</span>{{/if}}
+              </div>
+            {{/if}}
           </article>
         {{/inline}}
 
@@ -311,16 +394,10 @@
         {{else}}
           <div class="mg-empty">
             <div class="mg-empty-icon">
-              <i class="fas {{#if filter}}fa-magnifying-glass{{else}}fa-image{{/if}}" aria-hidden="true"></i>
+              <i class="fas {{emptyIcon}}" aria-hidden="true"></i>
             </div>
-            <h3>{{#if filter}}No matching images{{else}}This folder is empty{{/if}}</h3>
-            <p>
-              {{#if filter}}
-                Try a different search or clear the current one.
-              {{else}}
-                Choose another folder or add images here.
-              {{/if}}
-            </p>
+            <h3>{{emptyTitle}}</h3>
+            <p>{{emptyMessage}}</p>
           </div>
         {{/if}}
       </div>
@@ -596,7 +673,7 @@
                     value="{{selectedImage.scenePresetForm.initialScale}}"
                     min="0.1"
                     max="3"
-                    step="0.05"
+                    step="0.01"
                     placeholder="Keep current"
                   >
                 </label>
@@ -621,33 +698,21 @@
                 <i class="fas fa-layer-group" aria-hidden="true"></i>
                 Display
               </button>
+              <button
+                type="button"
+                class="mg-clear-metadata"
+                data-action="clear-image-metadata"
+                data-path="{{selectedImage.path}}"
+                title="Clear the saved name, description, and Scene preset"
+                {{#unless selectedImage.hasMetadata}}disabled{{/unless}}
+              >
+                <i class="fas fa-eraser" aria-hidden="true"></i>
+                Clear
+              </button>
             </div>
           </form>
         </div>
       </aside>
     {{/if}}
   </div>
-
-  <dialog class="mg-image-preview" data-role="image-preview" aria-labelledby="mg-image-preview-title">
-    <div class="mg-image-preview-frame">
-      <header class="mg-image-preview-header">
-        <div class="mg-image-preview-heading">
-          <strong id="mg-image-preview-title" data-role="image-preview-title">Image preview</strong>
-          <span data-role="image-preview-path"></span>
-        </div>
-        <button
-          type="button"
-          class="mg-image-preview-close"
-          data-role="image-preview-close"
-          aria-label="Close image preview"
-          title="Close preview"
-        >
-          <i class="fas fa-xmark" aria-hidden="true"></i>
-        </button>
-      </header>
-      <div class="mg-image-preview-canvas">
-        <img data-role="image-preview-image" alt="">
-      </div>
-    </div>
-  </dialog>
 </div>

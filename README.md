@@ -8,12 +8,16 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 - Refresh and rebuild the gallery index.
 - Optionally include subfolders.
 - Browse images in folder groups.
-- Right-click a thumbnail to open a large image preview.
-- Open a right-side inspector to set an image name, description, and preferred Scene grid size.
+- Right-click a thumbnail to open its Scene Details in a standalone window.
+- Edit an image name, description, custom tags, and Scene preset in its standalone Scene Details window.
+- Mark images as personal Favorites and filter the full indexed library to them.
+- Reopen recently displayed images from a personal Recently Displayed view.
+- Filter the indexed library by custom tags such as `town`, `combat`, `night`, or `interior`.
 - Save complete per-image Scene presets for grid appearance and scale, darkness,
   token vision, fog exploration, weather, background color, padding, and initial view.
 - Copy supported settings from the active Scene into an image preset.
-- Search images by path, name, folder, or description.
+- Clear all saved metadata for an image from either Scene Details interface.
+- Search images by path, name, folder, description, or tag.
 - Configure the image-title font size in Module Settings.
 - Display an image on the active scene's Token Layer.
 - Crossfade between Token Layer images with a configurable transition duration.
@@ -29,13 +33,15 @@ A lightweight gallery browser for scene and image files inside your Foundry User
 2. Open the left Scene Controls toolbar.
 3. Under the Token controls, click **MK-Scene-Gallery**.
 4. Pick a folder if needed.
-5. Left-click an image to open its details inspector, then set its name,
-   description, and Scene preset. Use **Copy Current** to capture the active
-   Scene configuration and current canvas view.
-6. Click **Display** in the inspector or use the thumbnail's Layer button to
+5. Right-click an image to open its standalone Scene Details window, then set
+   its name, description, tags, and Scene preset. Use **Copy Current** to capture the
+   active Scene configuration and current canvas view.
+6. Use the thumbnail star to add an image to **Favorites**, or choose a tag,
+   **Favorites**, or **Recently Displayed** under **Quick access** to filter the library.
+7. Click **Display** in the inspector or use the thumbnail's Layer button to
    display it on the active scene's Token Layer. Its saved grid size is applied
    automatically first.
-7. Click **Remove scene image** to clear it from the scene.
+8. Click **Remove scene image** to clear it from the scene.
 
 ## Rename and settings migration
 This package replaces the former `share-media-gallery` module ID with `mk-scene-gallery`.

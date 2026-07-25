@@ -14,6 +14,7 @@ repository. Source files are loaded directly by Foundry.
 - `module.json`: Foundry package manifest and release metadata.
 - `scripts/main.js`: Foundry hook registration and application entry point.
 - `scripts/app.js`: Gallery ApplicationV2 behavior and UI state.
+- `scripts/imageDetails.js`: Standalone image Scene Details ApplicationV2 window.
 - `scripts/fileIndex.js`: Image discovery and index caching.
 - `scripts/lighting.js`: Ambient Light scaling for Scene grid-size changes.
 - `scripts/settings.js`: Module settings and legacy setting migration.
@@ -45,6 +46,7 @@ Run these checks after relevant changes:
 
 ```powershell
 node --check scripts/app.js
+node --check scripts/imageDetails.js
 node --check scripts/main.js
 node --check scripts/fileIndex.js
 node --check scripts/lighting.js
