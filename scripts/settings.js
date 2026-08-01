@@ -2,7 +2,7 @@ export const MODULE_ID = "mk-scene-gallery";
 export const LEGACY_MODULE_ID = "share-media-gallery";
 export const DEFAULT_GRID_SIZE_MAX = 300;
 export const DEFAULT_IMAGE_TITLE_FONT_SIZE = 10;
-export const DEFAULT_TOKEN_LAYER_TRANSITION_MS = 500;
+export const DEFAULT_BACKGROUND_TRANSITION_MS = 500;
 
 const DEFAULTS = {
   baseDir: "uploads/",
@@ -14,7 +14,7 @@ const DEFAULTS = {
   imageTitles: {},
   imageMetadata: {},
   imageTitleFontSize: DEFAULT_IMAGE_TITLE_FONT_SIZE,
-  tokenLayerTransitionMs: DEFAULT_TOKEN_LAYER_TRANSITION_MS,
+  backgroundTransitionMs: DEFAULT_BACKGROUND_TRANSITION_MS,
   gridSizeMax: DEFAULT_GRID_SIZE_MAX
 };
 
@@ -66,7 +66,7 @@ export function registerSettings() {
 
   game.settings.register(MODULE_ID, "recentImages", {
     name: "Recently displayed gallery images",
-    hint: "Image paths most recently displayed on the Token Layer by this client.",
+    hint: "Image paths most recently set as Scene backgrounds by this client.",
     scope: "client",
     config: false,
     type: Array,
@@ -106,12 +106,12 @@ export function registerSettings() {
   });
 
   game.settings.register(MODULE_ID, "tokenLayerTransitionMs", {
-    name: "Token Layer crossfade duration",
-    hint: "Crossfade duration in milliseconds when changing images. Set to 0 to disable.",
+    name: "Scene background fade duration",
+    hint: "Fade duration in milliseconds between Scene backgrounds. Set to 0 to disable.",
     scope: "client",
     config: true,
     type: Number,
-    default: DEFAULTS.tokenLayerTransitionMs,
+    default: DEFAULTS.backgroundTransitionMs,
     range: {
       min: 0,
       max: 3000,

@@ -1,7 +1,6 @@
 import { registerSettings, migrateLegacySettings } from "./settings.js";
 import { registerHbsHelpers } from "./hbsHelpers.js";
 import { MediaGalleryApp } from "./app.js";
-import { registerTokenLayerRenderer } from "./tokenLayer.js";
 
 function addSceneControlButton(controls) {
   const tokenControls = Array.isArray(controls)
@@ -37,7 +36,6 @@ function addSceneControlButton(controls) {
 Hooks.once("init", () => {
   registerSettings();
   registerHbsHelpers();
-  registerTokenLayerRenderer();
   Hooks.on("getSceneControlButtons", addSceneControlButton);
 });
 

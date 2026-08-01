@@ -5,10 +5,10 @@ import {
 } from "./settings.js";
 import { indexImages, getCachedIndex, clearIndexCache } from "./fileIndex.js";
 import {
-  displayImageOnTokenLayer,
-  getTokenLayerImage,
-  removeImageFromTokenLayer
-} from "./tokenLayer.js";
+  getSceneBackground,
+  removeSceneBackground,
+  setSceneBackground
+} from "./sceneBackground.js";
 import {
   applyScenePreset,
   captureScenePreset,
@@ -18,7 +18,7 @@ import {
   prepareScenePresetForm,
   readScenePresetForm
 } from "./scenePresets.js";
-import { ImageDetailsApp } from "./imageDetails.js";
+import { ImagePreviewApp } from "./imagePreview.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MAX_RECENT_IMAGES = 50;
@@ -85,11 +85,14 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-image-metadata": async function (event, target) {
         await this._clearImageMetadata(event, target);
       },
-      "add-to-token-layer": async function (event, target) {
-        await this._addToTokenLayer(event, target);
+      "close-image-inspector": function (event) {
+        this._closeImageInspector(event);
       },
-      "remove-token-layer-image": async function (event, target) {
-        await this._removeTokenLayerImage(event, target);
+      "set-scene-background": async function (event, target) {
+        await this._setSceneBackground(event, target);
+      },
+      "remove-scene-background": async function (event, target) {
+        await this._removeSceneBackground(event, target);
       }
     }
   };
@@ -97,7 +100,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static PARTS = {
     gallery: {
       template: `modules/${MODULE_ID}/templates/gallery.hbs`,
-      scrollable: [".mg-tree-scroll"]
+      scrollable: [".mg-tree-scroll", ".mg-gallery-scroll", ".mg-inspector-scroll"]
     }
   };
 
@@ -146,7 +149,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._isClosing = false;
     this._initialIndexScheduled = false;
     this._isUploading = false;
-    this._imageDetailsApp = null;
+    this._selectedImagePath = "";
+    this._imagePreviewApp = null;
   }
 
   async close(options = {}) {
@@ -392,8 +396,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         gridSizeStep: 25,
         gridDisabled: true,
         gridTitle: "Select or view a scene to change its grid size",
-        tokenLayerRemoveDisabled: true,
-        tokenLayerRemoveTitle: "Open a scene before removing its Token Layer image",
+        backgroundRemoveDisabled: true,
+        backgroundRemoveTitle: "Open a scene before removing its background image",
         fixDisabled: true,
         fixTitle: "Select or view a scene to fix its bounds",
         lockViewBounds: { available: false }
@@ -404,7 +408,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const numericGridSize = Number(gridSize) || 100;
     const gridSizeValue = Math.min(gridSizeMax, Math.max(50, numericGridSize));
     const canEdit = scene.isOwner ?? !!game.user?.isGM;
-    const tokenLayerImage = getTokenLayerImage(scene);
+    const background = getSceneBackground(scene);
     const lockViewDrawing = this._getLockViewBoundingDrawing(scene);
     const drawingAnchor = lockViewDrawing
       ? this._getDrawingAnchor(scene, lockViewDrawing)
@@ -429,12 +433,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       gridTitle: canEdit
         ? `Change ${scene.name || "selected Scene"} grid size`
         : `You cannot edit ${scene.name || "the selected Scene"}`,
-      tokenLayerRemoveDisabled: !canEdit || !tokenLayerImage?.path,
-      tokenLayerRemoveTitle: !canEdit
+      backgroundRemoveDisabled: !canEdit || !background?.path,
+      backgroundRemoveTitle: !canEdit
         ? `You cannot edit ${scene.name || "the selected Scene"}`
-        : tokenLayerImage?.path
-          ? `Remove ${tokenLayerImage.name || "the current image"} from the Token Layer`
-          : "The active scene has no Token Layer image",
+        : background?.path
+          ? `Remove ${background.name || "the current image"} from the Scene background`
+          : "The selected Scene has no background image",
       fixDisabled: !canEdit || !lockViewDrawing,
       fixTitle: !canEdit
         ? `You cannot edit ${scene.name || "the selected Scene"}`
@@ -643,6 +647,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         hasScenePreset: hasScenePresetValues(scenePreset),
         favorite: this._favoriteImages.has(path),
         recentlyDisplayed: this._recentImages.includes(path),
+        selected: path === this._selectedImagePath,
         folder,
       };
     });
@@ -762,6 +767,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const favoriteCount = fileObjs.filter((file) => file.favorite).length;
     const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
     const availableTags = this._getAvailableTags(fileObjs);
+    const imageDetails = this._getImageDetailsData(this._selectedImagePath, fileObjs);
 
     let activeFolderLabel;
     let activeFolderPath;
@@ -797,7 +803,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     } else if (this._quickFilter === "recent") {
       emptyIcon = "fa-clock-rotate-left";
       emptyTitle = "No recently displayed images";
-      emptyMessage = "Images appear here after you display them on the Token Layer.";
+      emptyMessage = "Images appear here after you set them as a Scene background.";
     } else if (this._tagFilter) {
       emptyIcon = "fa-tag";
       emptyTitle = `No images tagged #${this._tagFilter}`;
@@ -835,6 +841,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       activeFolderPath,
       sceneData: this._prepareSceneData(),
       singleFiltered: filtered.length === 1,
+      ...imageDetails
     };
   }
 
@@ -855,14 +862,17 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     root.querySelector("[data-role='lockview-anchor']")
       ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
     this._bindLinkedContentControls(root);
+    root.querySelector("[data-role='image-details-form']")
+      ?.addEventListener("submit", (event) => this._saveImageDetails(event));
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
-      thumb.addEventListener("contextmenu", (event) => this._openImageDetailsWindow(event));
+      thumb.addEventListener("click", (event) => this._selectImageDetails(event));
+      thumb.addEventListener("contextmenu", (event) => this._openImagePreview(event));
       thumb.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         if (event.target?.closest?.("[data-action]")) return;
         event.preventDefault();
-        this._openImageDetailsWindow(event);
+        this._selectImageDetails(event);
       });
     });
 
@@ -1432,7 +1442,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
   }
 
-  async _addToTokenLayer(event, target = event.currentTarget) {
+  async _setSceneBackground(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
 
@@ -1446,7 +1456,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const scene = this._getSelectedScene();
     if (image && hasScenePresetValues(image.scenePreset)) {
       if (!scene) {
-        ui.notifications.warn("Open a scene before displaying an image on its Token Layer.");
+        ui.notifications.warn("Open a scene before setting its background.");
         return;
       }
       if (!(scene.isOwner ?? !!game.user?.isGM)) {
@@ -1465,10 +1475,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    const displayed = await displayImageOnTokenLayer(
-      path,
-      image?.label || target?.dataset?.title
-    );
+    const displayed = await setSceneBackground(scene, path);
     if (!displayed) return;
 
     await this._recordRecentlyDisplayed(path);
@@ -1485,13 +1492,13 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (Object.keys(view).length) await activeCanvas.animatePan(view);
   }
 
-  async _removeTokenLayerImage(event, target = event.currentTarget) {
+  async _removeSceneBackground(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
 
     if (target) target.disabled = true;
     try {
-      await removeImageFromTokenLayer();
+      await removeSceneBackground(this._getSelectedScene());
     } finally {
       this._safeRender(false);
     }
@@ -1610,7 +1617,26 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _openImageDetailsWindow(event) {
+  _selectImageDetails(event) {
+    if (event.target?.closest?.("[data-action]")) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const thumb = event.currentTarget;
+    const path = thumb?.dataset?.path;
+    if (!path) return;
+    this._selectedImagePath = path;
+    this._safeRender(false);
+  }
+
+  _closeImageInspector(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    this._selectedImagePath = "";
+    this._safeRender(false);
+  }
+
+  _openImagePreview(event) {
     event.preventDefault();
     event.stopPropagation();
     if (event.target?.closest?.("[data-action]")) return;
@@ -1620,26 +1646,25 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!path) return;
     const image = this._getFileObjects().find((candidate) => candidate.path === path);
     if (!image) {
-      console.error(`${MODULE_ID} | Could not open Scene Details for missing image`, { path });
-      ui.notifications.error("Could not open Scene Details for this image.");
+      console.error(`${MODULE_ID} | Could not open preview for missing image`, { path });
+      ui.notifications.error("Could not open a preview for this image.");
       return;
     }
 
-    if (!this._imageDetailsApp) {
-      this._imageDetailsApp = new ImageDetailsApp({
+    if (!this._imagePreviewApp) {
+      this._imagePreviewApp = new ImagePreviewApp({
         gallery: this,
-        path,
         image
       });
     } else {
-      this._imageDetailsApp.setImagePath(path, image);
+      this._imagePreviewApp.setImage(image);
     }
 
-    this._imageDetailsApp.render({ force: true });
+    this._imagePreviewApp.render({ force: true });
   }
 
-  _releaseImageDetailsApp(application) {
-    if (this._imageDetailsApp === application) this._imageDetailsApp = null;
+  _releaseImagePreviewApp(application) {
+    if (this._imagePreviewApp === application) this._imagePreviewApp = null;
   }
 
 }

@@ -3,8 +3,8 @@
 ## Project overview
 
 MK-Scene-Gallery is a Foundry VTT v12–v13 module written as browser-native ES
-modules. It provides a folder-based image gallery and its own scene Token Layer
-renderer.
+modules. It provides a folder-based image gallery for setting a Scene's native
+background image.
 
 There is no build step, package manager, or automated test suite in this
 repository. Source files are loaded directly by Foundry.
@@ -14,13 +14,13 @@ repository. Source files are loaded directly by Foundry.
 - `module.json`: Foundry package manifest and release metadata.
 - `scripts/main.js`: Foundry hook registration and application entry point.
 - `scripts/app.js`: Gallery ApplicationV2 behavior and UI state.
-- `scripts/imageDetails.js`: Standalone image Scene Details ApplicationV2 window.
+- `scripts/imagePreview.js`: Large image and video preview ApplicationV2 window.
 - `scripts/fileIndex.js`: Image discovery and index caching.
 - `scripts/lighting.js`: Ambient Light scaling for Scene grid-size changes.
 - `scripts/settings.js`: Module settings and legacy setting migration.
 - `scripts/scenePresets.js`: Per-image Scene preset normalization and application.
-- `scripts/tokenLayer.js`: Scene Token Layer image renderer.
-- `scripts/transitions.js`: Token Layer fade transition timing and animation.
+- `scripts/sceneBackground.js`: Native Scene background image updates.
+- `scripts/backgroundTransitions.js`: Native Scene background fade transitions.
 - `templates/gallery.hbs`: Handlebars application template.
 - `styles/gallery.css`: Gallery styles.
 
@@ -46,14 +46,14 @@ Run these checks after relevant changes:
 
 ```powershell
 node --check scripts/app.js
-node --check scripts/imageDetails.js
+node --check scripts/imagePreview.js
 node --check scripts/main.js
 node --check scripts/fileIndex.js
 node --check scripts/lighting.js
 node --check scripts/settings.js
 node --check scripts/scenePresets.js
-node --check scripts/tokenLayer.js
-node --check scripts/transitions.js
+node --check scripts/sceneBackground.js
+node --check scripts/backgroundTransitions.js
 node -e "JSON.parse(require('fs').readFileSync('module.json', 'utf8'))"
 git diff --check
 ```

@@ -23,10 +23,10 @@
 
       <button
         type="button"
-        data-action="remove-token-layer-image"
-        title="{{sceneData.tokenLayerRemoveTitle}}"
+        data-action="remove-scene-background"
+        title="{{sceneData.backgroundRemoveTitle}}"
         aria-label="Remove scene image"
-        {{#if sceneData.tokenLayerRemoveDisabled}}disabled{{/if}}
+        {{#if sceneData.backgroundRemoveDisabled}}disabled{{/if}}
       >
         <i class="fas fa-eraser" aria-hidden="true"></i>
         <span class="sr-only">Remove scene image</span>
@@ -104,7 +104,7 @@
     </label>
   </header>
 
-  <div class="mg-browser">
+  <div class="mg-browser {{#if selectedImage}}has-inspector{{/if}}">
     {{#if isIndexing}}
       <div class="mg-loading-overlay" aria-live="polite">
         <div class="mg-spinner" role="status" aria-label="Indexing media"></div>
@@ -333,10 +333,11 @@
       <div class="mg-gallery-scroll">
         {{#*inline "thumbCard"}}
           <article
-            class="mg-thumb"
+            class="mg-thumb {{#if selected}}is-selected{{/if}}"
             data-path="{{path}}"
-            title="{{path}}"
+            title="{{path}} — Left-click for Scene Details; right-click for a large preview"
             tabindex="0"
+            {{#if selected}}aria-current="true"{{/if}}
           >
             <div class="mg-thumb-img">
               {{#if isVideo}}
@@ -378,13 +379,13 @@
                 <button
                   type="button"
                   class="mg-action"
-                  data-action="add-to-token-layer"
+                  data-action="set-scene-background"
                   data-path="{{path}}"
                   data-title="{{label}}"
-                  title="Display on the Token Layer"
-                  aria-label="Display {{label}} on the Token Layer"
+                  title="Set as the Scene background"
+                  aria-label="Set {{label}} as the Scene background"
                 >
-                  <i class="fas fa-layer-group" aria-hidden="true"></i>
+                  <i class="fas fa-image" aria-hidden="true"></i>
                 </button>
               </div>
             </div>
@@ -495,6 +496,19 @@
                 maxlength="5000"
                 placeholder="Add notes about this scene"
               >{{selectedImage.description}}</textarea>
+            </label>
+
+            <label>
+              <span>Tags</span>
+              <input
+                type="text"
+                name="tags"
+                value="{{selectedImage.tagsText}}"
+                maxlength="1000"
+                placeholder="town, combat, night, interior"
+                autocomplete="off"
+              >
+              <small>Separate tags with commas. Tags are saved in lowercase.</small>
             </label>
 
             <div class="mg-preset-heading">
@@ -782,11 +796,11 @@
               </button>
               <button
                 type="button"
-                data-action="add-to-token-layer"
+                data-action="set-scene-background"
                 data-path="{{selectedImage.path}}"
                 data-title="{{selectedImage.label}}"
               >
-                <i class="fas fa-layer-group" aria-hidden="true"></i>
+                <i class="fas fa-image" aria-hidden="true"></i>
                 Display
               </button>
               <button

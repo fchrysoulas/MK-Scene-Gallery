@@ -8,8 +8,9 @@ A lightweight gallery browser for scene images and WebM videos inside your Found
 - Refresh and rebuild the gallery index.
 - Optionally include subfolders.
 - Browse images and looping WebM previews in folder groups.
-- Right-click a thumbnail to open its Scene Details in a standalone window.
-- Edit an image name, description, custom tags, and Scene preset in its standalone Scene Details window.
+- Left-click a thumbnail to open its Scene Details inside the gallery window.
+- Right-click a thumbnail to open a large image or video preview.
+- Edit an image name, description, custom tags, and Scene preset in the gallery's Scene Details inspector.
 - Mark images as personal Favorites and filter the full indexed library to them.
 - Reopen recently displayed images from a personal Recently Displayed view.
 - Filter the indexed library by custom tags such as `town`, `combat`, `night`, or `interior`.
@@ -18,12 +19,12 @@ A lightweight gallery browser for scene images and WebM videos inside your Found
   linked Journals, and Playlist Sounds.
 - Optionally open a linked Journal or start linked Playlist audio when an image is displayed.
 - Copy supported settings from the active Scene into an image preset.
-- Clear all saved metadata for an image from either Scene Details interface.
+- Clear all saved metadata for an image from the Scene Details inspector.
 - Search images by path, name, folder, description, or tag.
 - Configure the image-title font size in Module Settings.
-- Display an image or looping WebM video on the active scene's Token Layer.
-- Crossfade between Token Layer images with a configurable transition duration.
-- Remove the current Token Layer image from the gallery toolbar.
+- Set an image or looping WebM video as the active Scene's native background.
+- Fade directly between Scene backgrounds, with a configurable duration.
+- Remove the current Scene background from the gallery toolbar.
 - Configure the maximum Scene grid slider size in Module Settings (300 px by default).
 - Keep Ambient Light centers and rendered pixel coverage fixed while inversely adjusting their configured radii for Scene grid-size changes.
 
@@ -35,16 +36,17 @@ A lightweight gallery browser for scene images and WebM videos inside your Found
 2. Open the left Scene Controls toolbar.
 3. Under the Token controls, click **MK-Scene-Gallery**.
 4. Pick a folder if needed.
-5. Right-click an image to open its standalone Scene Details window, then set
+5. Left-click an image to open Scene Details inside the gallery, then set
    its name, description, tags, and Scene preset. Use **Copy Current** to capture the
    active Scene configuration, linked Journal and Playlist Sound, and current canvas view.
+   Right-click an image when you want a large preview.
 6. Use the thumbnail star to add an image to **Favorites**, or choose a tag,
    **Favorites**, or **Recently Displayed** under **Quick access** to filter the library.
-7. Click **Display** in the inspector or use the thumbnail's Layer button to
-   display it on the active scene's Token Layer. Its saved Scene settings and native
+7. Click **Display** in the inspector or use the thumbnail's image button to
+   set it as the active Scene's background. Its saved Scene settings and native
    Journal and Playlist associations are applied first, followed by any enabled
    open-Journal or start-audio actions.
-8. Click **Remove scene image** to clear it from the scene.
+8. Click **Remove scene image** to clear the Scene background.
 
 ## Rename and settings migration
 This package replaces the former `share-media-gallery` module ID with `mk-scene-gallery`.
