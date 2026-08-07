@@ -56,6 +56,22 @@ function booleanOrNull(value) {
   return null;
 }
 
+function fogExplorationOrNull(value) {
+  if (value === "" || value === null || value === undefined) return null;
+
+  if (Number(game.release?.generation) >= 14) {
+    if (value === true || value === "true") return CONST.FOG_EXPLORATION_MODES.INDIVIDUAL;
+    if (value === false || value === "false") return CONST.FOG_EXPLORATION_MODES.DISABLED;
+
+    const mode = Number(value);
+    return Object.values(CONST.FOG_EXPLORATION_MODES).includes(mode) ? mode : null;
+  }
+
+  if (value === 0 || value === "0") return false;
+  if (value === 1 || value === "1" || value === 2 || value === "2") return true;
+  return booleanOrNull(value);
+}
+
 function enabledOrNull(value) {
   return value === true || value === "true" ? true : null;
 }
@@ -94,7 +110,7 @@ export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}
     backgroundColor: colorOrNull(preset.backgroundColor),
     darkness: clampOrNull(preset.darkness, 0, 1),
     tokenVision: booleanOrNull(preset.tokenVision),
-    fogExploration: booleanOrNull(preset.fogExploration),
+    fogExploration: fogExplorationOrNull(preset.fogExploration),
     weather,
     padding: clampOrNull(preset.padding, 0, 0.5),
     journal: associationOrNull(preset.journal),
@@ -215,6 +231,31 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
     ));
   }
 
+  const fogExplorationOptions = Number(game.release?.generation) >= 14
+    ? [
+        option("", "Keep current", preset.fogExploration === null ? "" : preset.fogExploration),
+        option(
+          CONST.FOG_EXPLORATION_MODES.DISABLED,
+          "Disabled",
+          preset.fogExploration
+        ),
+        option(
+          CONST.FOG_EXPLORATION_MODES.INDIVIDUAL,
+          "Individual",
+          preset.fogExploration
+        ),
+        option(
+          CONST.FOG_EXPLORATION_MODES.SHARED,
+          "Shared",
+          preset.fogExploration
+        )
+      ]
+    : [
+        option("", "Keep current", preset.fogExploration === null ? "" : preset.fogExploration),
+        option("true", "Enabled", preset.fogExploration),
+        option("false", "Disabled", preset.fogExploration)
+      ];
+
   return {
     ...preset,
     backgroundColorValue: preset.backgroundColor ?? "#000000",
@@ -234,11 +275,7 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
       option("true", "Enabled", preset.tokenVision),
       option("false", "Disabled", preset.tokenVision)
     ],
-    fogExplorationOptions: [
-      option("", "Keep current", preset.fogExploration === null ? "" : preset.fogExploration),
-      option("true", "Enabled", preset.fogExploration),
-      option("false", "Disabled", preset.fogExploration)
-    ],
+    fogExplorationOptions,
     weatherOptions: [
       option(KEEP_CURRENT, "Keep current", weatherSelection),
       option("", "None", weatherSelection),
@@ -293,7 +330,7 @@ export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
 }
 
 export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
-  const isV13 = Number(game.release?.generation) >= 13;
+  const isV14 = Number(game.release?.generation) >= 14;
   const initial = scene?.initial ?? {};
   const activeCanvas = globalThis.canvas;
   const currentView = activeCanvas?.scene?.id === scene?.id
@@ -312,13 +349,11 @@ export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
     gridDistance: scene?.grid?.distance,
     gridUnits: scene?.grid?.units,
     backgroundColor: scene?.backgroundColor,
-    darkness: isV13
-      ? scene?.environment?.darknessLevel
-      : scene?.darkness,
+    darkness: scene?.environment?.darknessLevel,
     tokenVision: scene?.tokenVision,
-    fogExploration: isV13
-      ? scene?.fog?.exploration
-      : scene?.fogExploration,
+    fogExploration: isV14
+      ? scene?.fog?.mode
+      : scene?.fog?.exploration,
     weather: scene?.weather ?? "",
     padding: scene?.padding,
     journal: scene?.journal ?? "",
@@ -353,9 +388,11 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
   assign("initial.y", preset.initialY);
   assign("initial.scale", preset.initialScale);
 
-  const isV13 = Number(game.release?.generation) >= 13;
-  assign(isV13 ? "environment.darknessLevel" : "darkness", preset.darkness);
-  assign(isV13 ? "fog.exploration" : "fogExploration", preset.fogExploration);
+  assign("environment.darknessLevel", preset.darkness);
+  assign(
+    Number(game.release?.generation) >= 14 ? "fog.mode" : "fog.exploration",
+    preset.fogExploration
+  );
   if (preset.journal !== null) update.journal = preset.journal || null;
   if (preset.playlist !== null) update.playlist = preset.playlist || null;
   if (preset.playlistSound !== null) update.playlistSound = preset.playlistSound || null;

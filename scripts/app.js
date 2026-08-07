@@ -1525,17 +1525,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _uploadOneFile(baseDir, file) {
-    try {
-      await FilePicker.upload("data", baseDir, file, {}, { notify: false });
-      return;
-    } catch (error) {
-      try {
-        await FilePicker.upload("data", baseDir, file, { notify: false });
-        return;
-      } catch (fallbackError) {
-        throw fallbackError ?? error;
-      }
-    }
+    await FilePicker.upload("data", baseDir, file, {}, { notify: false });
   }
 
   async _refreshGallery() {

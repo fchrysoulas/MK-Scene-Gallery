@@ -1,34 +1,20 @@
 import { registerSettings, migrateLegacySettings } from "./settings.js";
 import { registerHbsHelpers } from "./hbsHelpers.js";
 import { MediaGalleryApp } from "./app.js";
+import { registerBackgroundTransitionHooks } from "./backgroundTransitions.js";
 
 function addSceneControlButton(controls) {
-  const tokenControls = Array.isArray(controls)
-    ? controls.find((control) => ["token", "tokens"].includes(control?.name))
-    : controls?.tokens
-      ?? controls?.token
-      ?? Object.values(controls ?? {}).find((control) => ["token", "tokens"].includes(control?.name));
+  const tokenControls = controls.tokens;
   if (!tokenControls) return;
 
   const openGallery = () => new MediaGalleryApp().render({ force: true });
-  const tool = {
+  tokenControls.tools["mk-scene-gallery"] = {
     name: "mk-scene-gallery",
     title: "MK-Scene-Gallery",
     icon: "fas fa-images",
-    visible: game.user.isGM,
-    button: true
-  };
-
-  if (Array.isArray(tokenControls.tools)) {
-    tool.onClick = openGallery;
-    tokenControls.tools.push(tool);
-    return;
-  }
-
-  tokenControls.tools ??= {};
-  tokenControls.tools["mk-scene-gallery"] = {
-    ...tool,
     order: Object.keys(tokenControls.tools).length,
+    visible: game.user.isGM,
+    button: true,
     onChange: openGallery
   };
 }
@@ -40,5 +26,6 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", async () => {
+  registerBackgroundTransitionHooks();
   await migrateLegacySettings();
 });

@@ -1,4 +1,4 @@
-# MK-Scene-Gallery (Foundry VTT v12–v13)
+# MK-Scene-Gallery (Foundry VTT v13–v14)
 
 A lightweight gallery browser for scene images and WebM videos inside your Foundry User Data folders.
 
@@ -23,13 +23,14 @@ A lightweight gallery browser for scene images and WebM videos inside your Found
 - Search images by path, name, folder, description, or tag.
 - Configure the image-title font size in Module Settings.
 - Set an image or looping WebM video as the active Scene's native background.
-- Fade directly between Scene backgrounds, with a configurable duration.
+- Fade whenever the viewed Scene or Level background changes, including changes
+  made from Scene Configuration, macros, or other modules.
 - Remove the current Scene background from the gallery toolbar.
 - Configure the maximum Scene grid slider size in Module Settings (300 px by default).
 - Keep Ambient Light centers and rendered pixel coverage fixed while inversely adjusting their configured radii for Scene grid-size changes.
 
 ## Requirements
-- Foundry VTT v12 or v13
+- Foundry VTT v13 or v14
 
 ## Usage
 1. Open a World.

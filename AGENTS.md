@@ -2,7 +2,7 @@
 
 ## Project overview
 
-MK-Scene-Gallery is a Foundry VTT v12–v13 module written as browser-native ES
+MK-Scene-Gallery is a Foundry VTT v13–v14 module written as browser-native ES
 modules. It provides a folder-based image gallery for setting a Scene's native
 background image.
 
@@ -27,7 +27,7 @@ repository. Source files are loaded directly by Foundry.
 ## Development conventions
 
 - Use modern JavaScript ES modules and two-space indentation.
-- Preserve compatibility with Foundry VTT v12 and ApplicationV2.
+- Preserve compatibility with Foundry VTT v13–v14 and ApplicationV2.
 - Use the exported `MODULE_ID` instead of repeating the module ID in JavaScript.
 - Treat paths passed to `FilePicker` as Foundry data-source paths, not operating
   system paths.
@@ -58,7 +58,7 @@ node -e "JSON.parse(require('fs').readFileSync('module.json', 'utf8'))"
 git diff --check
 ```
 
-For UI or Foundry API changes, also test manually in Foundry VTT v12 or v13.
+For UI or Foundry API changes, also test manually in Foundry VTT v13 or v14.
 
 ## Local testing
 

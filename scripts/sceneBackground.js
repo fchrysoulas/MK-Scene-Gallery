@@ -1,13 +1,5 @@
 import { MODULE_ID } from "./settings.js";
-import { withBackgroundTransition } from "./backgroundTransitions.js";
-
-let backgroundMutationQueue = Promise.resolve();
-
-function enqueueBackgroundMutation(operation) {
-  const result = backgroundMutationQueue.then(operation, operation);
-  backgroundMutationQueue = result.catch(() => {});
-  return result;
-}
+import { updateBackgroundDocumentWithTransition } from "./backgroundTransitions.js";
 
 function getImageLabel(path) {
   const fileName = String(path || "").split("/").pop() || "Scene background";
@@ -23,8 +15,18 @@ function canEditScene(scene) {
   return scene?.isOwner ?? !!game.user?.isGM;
 }
 
+function getBackgroundDocument(scene) {
+  if (Number(game.release?.generation) < 14) return scene;
+
+  const activeCanvas = globalThis.canvas;
+  if (activeCanvas?.scene?.id === scene?.id && activeCanvas.level) {
+    return activeCanvas.level;
+  }
+  return scene?.initialLevel ?? scene?.firstLevel ?? null;
+}
+
 export function getSceneBackground(scene) {
-  const path = scene?.background?.src;
+  const path = getBackgroundDocument(scene)?.background?.src;
   return path
     ? {
         path,
@@ -50,11 +52,16 @@ async function performSetSceneBackground(scene, path) {
     return false;
   }
 
+  const backgroundDocument = getBackgroundDocument(scene);
+  if (!backgroundDocument) {
+    ui.notifications.error("The selected Scene has no background Level.");
+    return false;
+  }
+
   try {
-    await withBackgroundTransition(
-      scene,
-      backgroundPath,
-      () => scene.update({ "background.src": backgroundPath })
+    await updateBackgroundDocumentWithTransition(
+      backgroundDocument,
+      { "background.src": backgroundPath }
     );
     return true;
   } catch (error) {
@@ -65,7 +72,7 @@ async function performSetSceneBackground(scene, path) {
 }
 
 export function setSceneBackground(scene, path) {
-  return enqueueBackgroundMutation(() => performSetSceneBackground(scene, path));
+  return performSetSceneBackground(scene, path);
 }
 
 async function performRemoveSceneBackground(scene) {
@@ -85,11 +92,16 @@ async function performRemoveSceneBackground(scene) {
     return false;
   }
 
+  const backgroundDocument = getBackgroundDocument(scene);
+  if (!backgroundDocument) {
+    ui.notifications.error("The selected Scene has no background Level.");
+    return false;
+  }
+
   try {
-    await withBackgroundTransition(
-      scene,
-      null,
-      () => scene.update({ "background.src": null })
+    await updateBackgroundDocumentWithTransition(
+      backgroundDocument,
+      { "background.src": Number(game.release?.generation) >= 14 ? "" : null }
     );
     ui.notifications.info(`Removed ${background.name} from the Scene background.`);
     return true;
@@ -101,5 +113,5 @@ async function performRemoveSceneBackground(scene) {
 }
 
 export function removeSceneBackground(scene) {
-  return enqueueBackgroundMutation(() => performRemoveSceneBackground(scene));
+  return performRemoveSceneBackground(scene);
 }
