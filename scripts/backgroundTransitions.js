@@ -5,6 +5,7 @@ import {
 
 const SOCKET_EVENT = `module.${MODULE_ID}`;
 const REMOTE_TRANSITION_TIMEOUT_MS = 15000;
+const NATIVE_BACKGROUND_RENDER_FRAMES = 2;
 const transitionQueues = new Map();
 const remoteTransitions = new Map();
 const completedRemoteTransitions = new Set();
@@ -251,6 +252,32 @@ function nextAnimationFrame(callback) {
   return globalThis.requestAnimationFrame(callback);
 }
 
+function waitForRenderFrames(frameCount = NATIVE_BACKGROUND_RENDER_FRAMES) {
+  return new Promise((resolve) => {
+    let remaining = Math.max(1, Math.round(frameCount));
+
+    const waitForNextFrame = () => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
+      nextAnimationFrame(waitForNextFrame);
+    };
+
+    nextAnimationFrame(waitForNextFrame);
+  });
+}
+
+async function destroyOverlayAfterNativeRender(overlay) {
+  if (!overlay?.root) return;
+
+  const parent = overlay?.root?.parent;
+  if (parent) parent.renderDirty = true;
+  await waitForRenderFrames();
+  destroyOverlay(overlay);
+}
+
 function animateOverlay(overlay, duration, primary) {
   if (!overlay?.root || overlay.root.destroyed) return Promise.resolve(false);
   if (duration <= 0) {
@@ -310,7 +337,7 @@ export async function withBackgroundTransition(
   try {
     return await operation();
   } finally {
-    destroyOverlay(overlay);
+    await destroyOverlayAfterNativeRender(overlay);
   }
 }
 
@@ -447,10 +474,13 @@ function finishRemoteTransition(transitionId) {
 
   completedRemoteTransitions.add(transitionId);
   const record = remoteTransitions.get(transitionId);
-  if (record) {
+  if (record && !record.cleanupPromise) {
     clearTimeout(record.timeoutId);
-    destroyOverlay(record.overlay);
-    remoteTransitions.delete(transitionId);
+    record.cleanupPromise = destroyOverlayAfterNativeRender(record.overlay).finally(() => {
+      if (remoteTransitions.get(transitionId) === record) {
+        remoteTransitions.delete(transitionId);
+      }
+    });
   }
 
   setTimeout(() => completedRemoteTransitions.delete(transitionId), REMOTE_TRANSITION_TIMEOUT_MS);
@@ -474,7 +504,7 @@ async function startRemoteTransition(message) {
   if (!overlay) return;
 
   if (completedRemoteTransitions.has(message.transitionId)) {
-    destroyOverlay(overlay);
+    void destroyOverlayAfterNativeRender(overlay);
     return;
   }
 
