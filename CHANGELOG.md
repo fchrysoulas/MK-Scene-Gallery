@@ -4,7 +4,8 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
-No changes yet.
+- Added MK Module Hub Metadata Standard v1 metadata and a runtime gallery-open
+  integration.
 
 ## 0.10.3
 

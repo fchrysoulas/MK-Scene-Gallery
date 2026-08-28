@@ -37,6 +37,10 @@ User Data folders and setting them as Scene backgrounds.
 - Configure title size and maximum grid size; Ambient Lights preserve their
   rendered coverage when the Scene grid size changes.
 
+When [MK Module Hub](https://github.com/fchrysoulas/MK-Module-Hub) is installed,
+MK-Scene-Gallery is available in the Hub catalog and its module details can open
+the gallery directly.
+
 ## Usage
 
 1. Open a World and click **MK-Scene-Gallery** in the left Scene Controls
