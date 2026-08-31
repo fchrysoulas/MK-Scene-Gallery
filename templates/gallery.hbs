@@ -104,7 +104,7 @@
     </label>
   </header>
 
-  <div class="mg-browser {{#if selectedImage}}has-inspector{{/if}}">
+  <div class="mg-browser">
     {{#if isIndexing}}
       <div class="mg-loading-overlay" aria-live="polite">
         <div class="mg-spinner" role="status" aria-label="Indexing media"></div>
@@ -335,7 +335,7 @@
           <article
             class="mg-thumb {{#if selected}}is-selected{{/if}}"
             data-path="{{path}}"
-            title="{{path}} — Left-click for Scene Details; right-click for a large preview"
+            title="{{path}} — Left-click to select; right-click for Scene Details"
             tabindex="0"
             {{#if selected}}aria-current="true"{{/if}}
           >
@@ -345,11 +345,10 @@
                   class="mg-img mg-video"
                   src="{{url}}"
                   aria-label="{{label}}"
-                  autoplay
                   muted
                   loop
                   playsinline
-                  preload="metadata"
+                  preload="none"
                 ></video>
               {{else}}
                 <img class="mg-img" src="{{url}}" alt="{{label}}" loading="lazy">
@@ -376,6 +375,16 @@
                 <i class="{{#if favorite}}fas{{else}}far{{/if}} fa-star" aria-hidden="true"></i>
               </button>
               <div class="mg-hover-actions">
+                <button
+                  type="button"
+                  class="mg-action"
+                  data-action="preview-image"
+                  data-path="{{path}}"
+                  title="Preview image or video"
+                  aria-label="Preview {{label}}"
+                >
+                  <i class="fas fa-expand" aria-hidden="true"></i>
+                </button>
                 <button
                   type="button"
                   class="mg-action"
@@ -430,394 +439,5 @@
       </footer>
     </main>
 
-    {{#if selectedImage}}
-      <aside class="mg-inspector" aria-label="Selected image details">
-        <header class="mg-inspector-header">
-          <div>
-            <i class="fas fa-image" aria-hidden="true"></i>
-            <span>Scene Details</span>
-          </div>
-          <button
-            type="button"
-            data-action="close-image-inspector"
-            title="Close details"
-            aria-label="Close image details"
-          >
-            <i class="fas fa-xmark" aria-hidden="true"></i>
-          </button>
-        </header>
-
-        <div class="mg-inspector-scroll">
-          {{#if selectedImage.isVideo}}
-            <video
-              class="mg-inspector-preview mg-video"
-              src="{{selectedImage.url}}"
-              aria-label="{{selectedImage.label}}"
-              autoplay
-              muted
-              loop
-              playsinline
-              controls
-              preload="metadata"
-            ></video>
-          {{else}}
-            <img
-              class="mg-inspector-preview"
-              src="{{selectedImage.url}}"
-              alt="{{selectedImage.label}}"
-            >
-          {{/if}}
-          <div class="mg-inspector-path" title="{{selectedImage.path}}">
-            {{selectedImage.path}}
-          </div>
-
-          <form
-            class="mg-inspector-form"
-            data-role="image-details-form"
-            data-path="{{selectedImage.path}}"
-          >
-            <label>
-              <span>Name</span>
-              <input
-                type="text"
-                name="title"
-                value="{{selectedImage.customTitle}}"
-                placeholder="{{selectedImage.fileName}}"
-                maxlength="200"
-                autocomplete="off"
-              >
-            </label>
-
-            <label>
-              <span>Description</span>
-              <textarea
-                name="description"
-                rows="6"
-                maxlength="5000"
-                placeholder="Add notes about this scene"
-              >{{selectedImage.description}}</textarea>
-            </label>
-
-            <label>
-              <span>Tags</span>
-              <input
-                type="text"
-                name="tags"
-                value="{{selectedImage.tagsText}}"
-                maxlength="1000"
-                placeholder="town, combat, night, interior"
-                autocomplete="off"
-              >
-              <small>Separate tags with commas. Tags are saved in lowercase.</small>
-            </label>
-
-            <div class="mg-preset-heading">
-              <span>Scene preset</span>
-              <button
-                type="button"
-                data-action="copy-scene-preset"
-                title="Copy all supported settings from the active Scene"
-                {{#unless selectedSceneAvailable}}disabled{{/unless}}
-              >
-                <i class="fas fa-camera" aria-hidden="true"></i>
-                Copy Current
-              </button>
-            </div>
-
-            <details class="mg-preset-section" open>
-              <summary>Grid</summary>
-              <div class="mg-preset-fields">
-                <label class="is-full">
-                  <span>Grid type</span>
-                  <select name="gridType">
-                    {{#each selectedImage.scenePresetForm.gridTypeOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label>
-                  <span>Size</span>
-                  <div class="mg-inspector-grid-input">
-                    <input
-                      type="number"
-                      name="gridSize"
-                      value="{{selectedImage.scenePresetForm.gridSize}}"
-                      min="{{imageGridSizeMin}}"
-                      max="{{imageGridSizeMax}}"
-                      step="{{imageGridSizeStep}}"
-                      placeholder="Keep"
-                    >
-                    <span>px</span>
-                  </div>
-                </label>
-
-                <label>
-                  <span>Distance</span>
-                  <input
-                    type="number"
-                    name="gridDistance"
-                    value="{{selectedImage.scenePresetForm.gridDistance}}"
-                    min="0.01"
-                    step="0.01"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label>
-                  <span>Units</span>
-                  <input
-                    type="text"
-                    name="gridUnits"
-                    value="{{selectedImage.scenePresetForm.gridUnits}}"
-                    maxlength="30"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label>
-                  <span>Line color</span>
-                  <input
-                    type="text"
-                    name="gridColor"
-                    value="{{selectedImage.scenePresetForm.gridColor}}"
-                    pattern="#[0-9a-fA-F]{6}"
-                    placeholder="#000000"
-                  >
-                </label>
-
-                <label class="is-full">
-                  <span>Line opacity</span>
-                  <input
-                    type="number"
-                    name="gridAlpha"
-                    value="{{selectedImage.scenePresetForm.gridAlpha}}"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    placeholder="Keep current"
-                  >
-                </label>
-              </div>
-            </details>
-
-            <details class="mg-preset-section">
-              <summary>Vision & Environment</summary>
-              <div class="mg-preset-fields">
-                <label>
-                  <span>Darkness</span>
-                  <input
-                    type="number"
-                    name="darkness"
-                    value="{{selectedImage.scenePresetForm.darkness}}"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label>
-                  <span>Padding</span>
-                  <input
-                    type="number"
-                    name="padding"
-                    value="{{selectedImage.scenePresetForm.padding}}"
-                    min="0"
-                    max="0.5"
-                    step="0.05"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label class="is-full">
-                  <span>Token vision</span>
-                  <select name="tokenVision">
-                    {{#each selectedImage.scenePresetForm.tokenVisionOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label class="is-full">
-                  <span>Fog exploration</span>
-                  <select name="fogExploration">
-                    {{#each selectedImage.scenePresetForm.fogExplorationOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label class="is-full">
-                  <span>Weather</span>
-                  <select name="weather">
-                    {{#each selectedImage.scenePresetForm.weatherOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label class="is-full">
-                  <span>Background color</span>
-                  <input
-                    type="color"
-                    name="backgroundColor"
-                    value="{{selectedImage.scenePresetForm.backgroundColorValue}}"
-                    {{#unless selectedImage.scenePresetForm.backgroundColorEnabled}}disabled{{/unless}}
-                  >
-                </label>
-
-                <label class="is-full mg-linked-action">
-                  <input
-                    type="checkbox"
-                    name="useBackgroundColor"
-                    value="true"
-                    {{#if selectedImage.scenePresetForm.backgroundColorEnabled}}checked{{/if}}
-                  >
-                  <span class="mg-linked-toggle" aria-hidden="true"></span>
-                  <span class="mg-linked-action-text">Set background color when displayed</span>
-                </label>
-              </div>
-              <small class="mg-preset-warning">
-                Changing Scene padding can reposition placed canvas elements.
-              </small>
-            </details>
-
-            <details class="mg-preset-section">
-              <summary>Journal & Audio</summary>
-              <div class="mg-preset-fields">
-                <label class="is-full">
-                  <span>Journal entry</span>
-                  <select name="journal">
-                    {{#each selectedImage.scenePresetForm.journalOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label class="is-full mg-linked-action">
-                  <input
-                    type="checkbox"
-                    name="openJournal"
-                    value="true"
-                    {{#if selectedImage.scenePresetForm.openJournal}}checked{{/if}}
-                    {{#if selectedImage.scenePresetForm.journalActionDisabled}}disabled{{/if}}
-                  >
-                  <span class="mg-linked-toggle" aria-hidden="true"></span>
-                  <span class="mg-linked-action-text">Open Journal when displayed</span>
-                </label>
-
-                <label class="is-full">
-                  <span>Playlist sound</span>
-                  <select name="playlistSoundLink">
-                    {{#each selectedImage.scenePresetForm.playlistSoundOptions as |option|}}
-                      <option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>
-                        {{option.label}}
-                      </option>
-                    {{/each}}
-                  </select>
-                </label>
-
-                <label class="is-full mg-linked-action">
-                  <input
-                    type="checkbox"
-                    name="startPlaylistSound"
-                    value="true"
-                    {{#if selectedImage.scenePresetForm.startPlaylistSound}}checked{{/if}}
-                    {{#if selectedImage.scenePresetForm.playlistActionDisabled}}disabled{{/if}}
-                  >
-                  <span class="mg-linked-toggle" aria-hidden="true"></span>
-                  <span class="mg-linked-action-text">Start audio when displayed</span>
-                </label>
-              </div>
-              <small class="mg-linked-note">
-                Associations are saved to the active Scene before optional Journal or audio actions run.
-              </small>
-            </details>
-
-            <details class="mg-preset-section">
-              <summary>Initial View</summary>
-              <div class="mg-preset-fields">
-                <label>
-                  <span>Center X</span>
-                  <input
-                    type="number"
-                    name="initialX"
-                    value="{{selectedImage.scenePresetForm.initialX}}"
-                    step="1"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label>
-                  <span>Center Y</span>
-                  <input
-                    type="number"
-                    name="initialY"
-                    value="{{selectedImage.scenePresetForm.initialY}}"
-                    step="1"
-                    placeholder="Keep"
-                  >
-                </label>
-
-                <label class="is-full">
-                  <span>Zoom</span>
-                  <input
-                    type="number"
-                    name="initialScale"
-                    value="{{selectedImage.scenePresetForm.initialScale}}"
-                    min="0.1"
-                    max="3"
-                    step="0.01"
-                    placeholder="Keep current"
-                  >
-                </label>
-              </div>
-            </details>
-
-            <small class="mg-preset-note">
-              Blank values preserve the active Scene setting. Saved values are applied before display.
-            </small>
-
-            <div class="mg-inspector-actions">
-              <button type="submit">
-                <i class="fas fa-floppy-disk" aria-hidden="true"></i>
-                Save
-              </button>
-              <button
-                type="button"
-                data-action="set-scene-background"
-                data-path="{{selectedImage.path}}"
-                data-title="{{selectedImage.label}}"
-              >
-                <i class="fas fa-image" aria-hidden="true"></i>
-                Display
-              </button>
-              <button
-                type="button"
-                class="mg-clear-metadata"
-                data-action="clear-image-metadata"
-                data-path="{{selectedImage.path}}"
-                title="Clear the saved name, description, and Scene preset"
-                {{#unless selectedImage.hasMetadata}}disabled{{/unless}}
-              >
-                <i class="fas fa-eraser" aria-hidden="true"></i>
-                Clear
-              </button>
-            </div>
-          </form>
-        </div>
-      </aside>
-    {{/if}}
   </div>
 </div>

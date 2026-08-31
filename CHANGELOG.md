@@ -4,7 +4,12 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
-No changes yet.
+- Changed thumbnail interactions so left-click selects, right-click opens Scene
+  Details in a separate window, and the card preview action remains available.
+- Added Scene Details tabs for Info, Grid, Vision, Journal, Audio, and Initial
+  View, plus drag-and-drop Journal Entry and Playlist linking. Linked Journal
+  Entries now open and linked audio now starts automatically, with
+  clear-selection controls.
 
 ## 0.10.4
 

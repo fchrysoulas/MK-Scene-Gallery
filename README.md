@@ -32,6 +32,9 @@ User Data folders and setting them as Scene backgrounds.
   gallery toolbar, and fade background changes made by Foundry or other modules.
 - Save per-image Scene presets for grid, vision, fog, weather, lighting,
   background, padding, linked Journals, Playlist Sounds, and canvas view.
+- Use Scene Details tabs for image info and preset sections, and drag Journal
+  Entries, Playlists, or Playlist Sounds onto their linked-content fields; saved
+  links run automatically when the image is displayed.
 - Apply presets, open linked Journals, start linked audio, and copy supported
   settings from the active Scene.
 - Configure title size and maximum grid size; Ambient Lights preserve their
@@ -46,11 +49,16 @@ the gallery directly.
 1. Open a World and click **MK-Scene-Gallery** in the left Scene Controls
    toolbar.
 2. Choose a folder, then refresh or rebuild the index if needed.
-3. Left-click a thumbnail to open its Scene Details inspector. Right-click it
-   for a large image or video preview.
+3. Left-click a thumbnail to select it. Right-click it to open Scene Details in
+   a separate window; use the expand icon on a card for a large image or video
+   preview.
 4. Use **Favorites**, **Recently Displayed**, tags, or search to find assets.
-5. In the inspector, click **Display** to apply the image and its saved Scene
-   preset to the active Scene. Use **Remove scene image** to clear the background.
+5. In Scene Details, use the left-side tabs to switch between Info, Grid,
+   Vision, Journal, Audio, and Initial View settings. Journal Entries, Playlists, and
+   Playlist Sounds can be dragged onto their fields as an alternative to the
+   dropdowns; use the clear button at the end of either field to remove a link.
+6. Click **Display** to apply the image and its saved Scene preset to the active
+   Scene. Use **Remove scene image** to clear the background.
 
 ## Migration from Share Media Gallery
 

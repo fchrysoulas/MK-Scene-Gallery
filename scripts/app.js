@@ -19,6 +19,7 @@ import {
   readScenePresetForm
 } from "./scenePresets.js";
 import { ImagePreviewApp } from "./imagePreview.js";
+import { SceneDetailsApp } from "./sceneDetails.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const MAX_RECENT_IMAGES = 50;
@@ -70,6 +71,9 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "clear-search": async function () {
         this._clearSearch();
       },
+      "preview-image": function (event, target) {
+        this._openImagePreviewAction(event, target);
+      },
       "select-quick-filter": async function (event, target) {
         this._selectQuickFilter(event, target);
       },
@@ -78,15 +82,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       },
       "toggle-favorite": async function (event, target) {
         await this._toggleFavorite(event, target);
-      },
-      "copy-scene-preset": async function (event, target) {
-        this._copyCurrentScenePreset(event, target);
-      },
-      "clear-image-metadata": async function (event, target) {
-        await this._clearImageMetadata(event, target);
-      },
-      "close-image-inspector": function (event) {
-        this._closeImageInspector(event);
       },
       "set-scene-background": async function (event, target) {
         await this._setSceneBackground(event, target);
@@ -100,7 +95,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static PARTS = {
     gallery: {
       template: `modules/${MODULE_ID}/templates/gallery.hbs`,
-      scrollable: [".mg-tree-scroll", ".mg-gallery-scroll", ".mg-inspector-scroll"]
+      scrollable: [".mg-tree-scroll", ".mg-gallery-scroll"]
     }
   };
 
@@ -151,6 +146,9 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._isUploading = false;
     this._selectedImagePath = "";
     this._imagePreviewApp = null;
+    this._sceneDetailsApp = null;
+    this._sceneRerenderTimer = null;
+    this._thumbnailVideoObserver = null;
   }
 
   async close(options = {}) {
@@ -162,6 +160,13 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       clearTimeout(this._searchRenderTimer);
       this._searchRenderTimer = null;
     }
+    if (this._sceneRerenderTimer) {
+      clearTimeout(this._sceneRerenderTimer);
+      this._sceneRerenderTimer = null;
+    }
+    await this._sceneDetailsApp?.close?.();
+    this._thumbnailVideoObserver?.disconnect?.();
+    this._thumbnailVideoObserver = null;
     return super.close(options);
   }
 
@@ -767,7 +772,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const favoriteCount = fileObjs.filter((file) => file.favorite).length;
     const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
     const availableTags = this._getAvailableTags(fileObjs);
-    const imageDetails = this._getImageDetailsData(this._selectedImagePath, fileObjs);
 
     let activeFolderLabel;
     let activeFolderPath;
@@ -840,8 +844,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       activeFolderLabel,
       activeFolderPath,
       sceneData: this._prepareSceneData(),
-      singleFiltered: filtered.length === 1,
-      ...imageDetails
+      singleFiltered: filtered.length === 1
     };
   }
 
@@ -849,6 +852,9 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     super._onRender(context, options);
 
     const root = this.element;
+    this._thumbnailVideoObserver?.disconnect?.();
+    this._thumbnailVideoObserver = null;
+
     root.querySelector("[data-role='toggle-recursive']")
       ?.addEventListener("change", (event) => this._toggleRecursive(event));
     root.querySelector("[data-role='search']")
@@ -861,18 +867,15 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
     root.querySelector("[data-role='lockview-anchor']")
       ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
-    this._bindLinkedContentControls(root);
-    root.querySelector("[data-role='image-details-form']")
-      ?.addEventListener("submit", (event) => this._saveImageDetails(event));
 
     root.querySelectorAll(".mg-thumb").forEach((thumb) => {
-      thumb.addEventListener("click", (event) => this._selectImageDetails(event));
-      thumb.addEventListener("contextmenu", (event) => this._openImagePreview(event));
+      thumb.addEventListener("click", (event) => this._selectImage(event));
+      thumb.addEventListener("contextmenu", (event) => this._openSceneDetails(event));
       thumb.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         if (event.target?.closest?.("[data-action]")) return;
         event.preventDefault();
-        this._selectImageDetails(event);
+        this._selectImage(event);
       });
     });
 
@@ -882,6 +885,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (thumb) thumb.classList.add("is-missing");
       failedMedia.style.display = "none";
     }));
+    this._bindThumbnailVideos(root);
 
     if (!this._initialIndexScheduled && !this._indexed && !this.loading && !this._indexPromise) {
       this._scheduleInitialIndex();
@@ -899,10 +903,92 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   }
 
+  _bindThumbnailVideos(root) {
+    const videos = Array.from(root.querySelectorAll(".mg-thumb .mg-video"));
+    if (!videos.length) return;
+
+    const play = (video) => {
+      if (!video?.isConnected) return;
+      const promise = video.play();
+      promise?.catch?.(() => {});
+    };
+    const pause = (video) => {
+      if (!video) return;
+      video.pause();
+      try {
+        video.currentTime = 0;
+      } catch {
+        // Ignore media elements which are not ready to seek.
+      }
+    };
+
+    if (typeof IntersectionObserver === "function") {
+      const scrollRoot = root.querySelector(".mg-gallery-scroll");
+      this._thumbnailVideoObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) play(entry.target);
+          else pause(entry.target);
+        }
+      }, {
+        root: scrollRoot ?? null,
+        threshold: 0.1
+      });
+
+      videos.forEach((video) => this._thumbnailVideoObserver.observe(video));
+      return;
+    }
+
+    for (const video of videos) {
+      const thumb = video.closest(".mg-thumb");
+      thumb?.addEventListener("pointerenter", () => play(video));
+      thumb?.addEventListener("pointerleave", () => pause(video));
+      thumb?.addEventListener("focusin", () => play(video));
+      thumb?.addEventListener("focusout", (event) => {
+        if (!thumb.contains(event.relatedTarget)) pause(video);
+      });
+    }
+  }
+
+  _getOwningScene(document) {
+    const seen = new Set();
+    let current = document;
+
+    while (current && !seen.has(current)) {
+      if (current.documentName === "Scene") return current;
+      seen.add(current);
+      current = current.parent;
+    }
+
+    return null;
+  }
+
+  _isRelevantSceneHook(document) {
+    const selectedScene = this._getSelectedScene();
+    if (!selectedScene?.id) return false;
+
+    const owningScene = this._getOwningScene(document)
+      ?? (document?.id === selectedScene.id ? document : null);
+    return owningScene?.id === selectedScene.id;
+  }
+
+  _scheduleSceneRerender() {
+    if (this._sceneRerenderTimer || this._isClosing) return;
+
+    this._sceneRerenderTimer = setTimeout(() => {
+      this._sceneRerenderTimer = null;
+      if (this._isClosing) return;
+      this._safeRender(false);
+    }, 50);
+  }
+
   _onFirstRender(context, options) {
     super._onFirstRender(context, options);
 
-    const rerenderSceneData = () => this._safeRender(false);
+    const rerenderSceneData = (document) => {
+      if (!this._isRelevantSceneHook(document)) return;
+      this._scheduleSceneRerender();
+    };
+    const rerenderAfterCanvasReady = () => this._scheduleSceneRerender();
     const sceneHooks = [
       "canvasReady",
       "updateScene",
@@ -915,7 +1001,10 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     ];
 
     for (const hookName of sceneHooks) {
-      const hookId = Hooks.on(hookName, rerenderSceneData);
+      const callback = hookName === "canvasReady"
+        ? rerenderAfterCanvasReady
+        : rerenderSceneData;
+      const hookId = Hooks.on(hookName, callback);
       this._sceneHookIds.push([hookName, hookId]);
     }
   }
@@ -1169,42 +1258,6 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _syncLinkedContentForm(form) {
-    if (!form) return;
-
-    const backgroundColor = form.elements?.backgroundColor;
-    const useBackgroundColor = form.elements?.useBackgroundColor;
-    if (backgroundColor && useBackgroundColor) {
-      backgroundColor.disabled = !useBackgroundColor.checked;
-    }
-
-    const journal = form.elements?.journal;
-    const openJournal = form.elements?.openJournal;
-    if (journal && openJournal) {
-      const available = !!journal.value && journal.value !== KEEP_CURRENT;
-      openJournal.disabled = !available;
-      if (!available) openJournal.checked = false;
-    }
-
-    const playlistSound = form.elements?.playlistSoundLink;
-    const startPlaylistSound = form.elements?.startPlaylistSound;
-    if (playlistSound && startPlaylistSound) {
-      const available = !!playlistSound.value && playlistSound.value !== KEEP_CURRENT;
-      startPlaylistSound.disabled = !available;
-      if (!available) startPlaylistSound.checked = false;
-    }
-  }
-
-  _bindLinkedContentControls(root = this.element) {
-    root?.querySelectorAll?.("[data-role='image-details-form']").forEach((form) => {
-      const sync = () => this._syncLinkedContentForm(form);
-      form.elements?.useBackgroundColor?.addEventListener("change", sync);
-      form.elements?.journal?.addEventListener("change", sync);
-      form.elements?.playlistSoundLink?.addEventListener("change", sync);
-      sync();
-    });
-  }
-
   _selectQuickFilter(event, target = event.currentTarget) {
     event.preventDefault();
     event.stopPropagation();
@@ -1296,9 +1349,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
         setValue(name, value === null ? KEEP_CURRENT : value);
       } else if ([
         "playlist",
-        "playlistSound",
-        "openJournal",
-        "startPlaylistSound"
+        "playlistSound"
       ].includes(name)) {
         continue;
       } else if (name === "initialScale") {
@@ -1308,21 +1359,13 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
     setValue("playlistSoundLink", prepared.playlistSoundLink);
-    setValue("backgroundColor", prepared.backgroundColorValue);
-    const openJournal = form.elements?.openJournal;
-    const startPlaylistSound = form.elements?.startPlaylistSound;
-    const useBackgroundColor = form.elements?.useBackgroundColor;
-    if (openJournal) openJournal.checked = false;
-    if (startPlaylistSound) startPlaylistSound.checked = false;
-    if (useBackgroundColor) useBackgroundColor.checked = prepared.backgroundColorEnabled;
-    this._syncLinkedContentForm(form);
   }
 
   async _runLinkedContentActions(image) {
     const preset = image?.scenePreset;
     if (!preset) return;
 
-    if (preset.openJournal && preset.journal) {
+    if (preset.journal) {
       try {
         const journal = game.journal?.get?.(preset.journal);
         if (!journal) throw new Error(`Journal ${preset.journal} was not found.`);
@@ -1335,7 +1378,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    if (preset.startPlaylistSound && preset.playlist) {
+    if (preset.playlist) {
       try {
         const playlist = game.playlists?.get?.(preset.playlist);
         if (!playlist) throw new Error(`Playlist ${preset.playlist} was not found.`);
@@ -1387,10 +1430,12 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     delete nextTitles[path];
     if (target) target.disabled = true;
 
+    let cleared = false;
     try {
       if (hadMetadata) await game.settings.set(MODULE_ID, "imageMetadata", nextMetadata);
       if (hadLegacyTitle) await game.settings.set(MODULE_ID, "imageTitles", nextTitles);
       ui.notifications.info("Image metadata cleared.");
+      cleared = true;
     } catch (error) {
       console.error(`${MODULE_ID} | Could not clear image metadata`, error);
       ui.notifications.error("Could not clear the image metadata.");
@@ -1398,6 +1443,8 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (target) target.disabled = false;
       this._safeRender(false);
     }
+
+    return cleared;
   }
 
   async _saveImageDetails(event) {
@@ -1410,16 +1457,21 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const title = String(form.elements?.title?.value ?? "").trim();
     const description = String(form.elements?.description?.value ?? "").trim();
     const tags = this._normalizeTags(form.elements?.tags?.value);
-    const scenePreset = readScenePresetForm(form, {
-      gridSizeMax: this._getGridSizeMax()
-    });
-
     const savedMetadata = game.settings.get(MODULE_ID, "imageMetadata");
-    const nextMetadata = savedMetadata
+    const currentMetadata = savedMetadata
       && typeof savedMetadata === "object"
       && !Array.isArray(savedMetadata)
-      ? { ...savedMetadata }
+      ? savedMetadata
       : {};
+    const existingPreset = normalizeScenePreset(currentMetadata[path]?.scenePreset, {
+      gridSizeMax: this._getGridSizeMax()
+    });
+    const scenePreset = readScenePresetForm(form, {
+      gridSizeMax: this._getGridSizeMax(),
+      fallbackBackgroundColor: existingPreset.backgroundColor
+    });
+
+    const nextMetadata = { ...currentMetadata };
     nextMetadata[path] = {
       title,
       description,
@@ -1431,15 +1483,20 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const submit = form.querySelector("button[type='submit']");
     if (submit) submit.disabled = true;
 
+    let saved = false;
     try {
       await game.settings.set(MODULE_ID, "imageMetadata", nextMetadata);
       ui.notifications.info("Image details saved.");
+      saved = true;
     } catch (error) {
       console.error(`${MODULE_ID} | Could not save image details`, error);
       ui.notifications.error("Could not save the image details.");
     } finally {
+      if (submit) submit.disabled = false;
       this._safeRender(false);
     }
+
+    return saved;
   }
 
   async _setSceneBackground(event, target = event.currentTarget) {
@@ -1607,7 +1664,7 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _selectImageDetails(event) {
+  _selectImage(event) {
     if (event.target?.closest?.("[data-action]")) return;
     event.preventDefault();
     event.stopPropagation();
@@ -1619,20 +1676,26 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._safeRender(false);
   }
 
-  _closeImageInspector(event) {
-    event?.preventDefault?.();
-    event?.stopPropagation?.();
-    this._selectedImagePath = "";
-    this._safeRender(false);
-  }
-
-  _openImagePreview(event) {
+  _openSceneDetails(event) {
     event.preventDefault();
     event.stopPropagation();
     if (event.target?.closest?.("[data-action]")) return;
 
     const thumb = event.currentTarget;
     const path = thumb?.dataset?.path;
+    if (!path) return;
+    this._selectedImagePath = path;
+    this._safeRender(false);
+    this._showSceneDetails(path);
+  }
+
+  _openImagePreviewAction(event, target = event.currentTarget) {
+    event.preventDefault();
+    event.stopPropagation();
+    this._showImagePreview(target?.dataset?.path);
+  }
+
+  _showImagePreview(path) {
     if (!path) return;
     const image = this._getFileObjects().find((candidate) => candidate.path === path);
     if (!image) {
@@ -1653,8 +1716,33 @@ export class MediaGalleryApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._imagePreviewApp.render({ force: true });
   }
 
+  _showSceneDetails(path) {
+    if (!path) return;
+    const image = this._getFileObjects().find((candidate) => candidate.path === path);
+    if (!image) {
+      console.error(`${MODULE_ID} | Could not open Scene Details for missing image`, { path });
+      ui.notifications.error("Could not open Scene Details for this image.");
+      return;
+    }
+
+    if (!this._sceneDetailsApp) {
+      this._sceneDetailsApp = new SceneDetailsApp({
+        gallery: this,
+        image
+      });
+    } else {
+      this._sceneDetailsApp.setImage(image);
+    }
+
+    this._sceneDetailsApp.render({ force: true });
+  }
+
   _releaseImagePreviewApp(application) {
     if (this._imagePreviewApp === application) this._imagePreviewApp = null;
+  }
+
+  _releaseSceneDetailsApp(application) {
+    if (this._sceneDetailsApp === application) this._sceneDetailsApp = null;
   }
 
 }

@@ -6,6 +6,11 @@ import { registerBackgroundTransitionHooks } from "./backgroundTransitions.js";
 const HUB_METADATA_FLAG = "mk-module-hub";
 
 function openGallery() {
+  if (!game.user?.isGM) {
+    ui.notifications?.warn?.("Only Game Masters can open MK-Scene-Gallery.");
+    return null;
+  }
+
   return new MediaGalleryApp().render({ force: true });
 }
 

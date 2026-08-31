@@ -262,10 +262,8 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
     backgroundColorEnabled: preset.backgroundColor !== null,
     initialScale: preset.initialScale === null ? null : preset.initialScale.toFixed(2),
     journalOptions,
-    journalActionDisabled: !preset.journal,
     playlistSoundLink: selectedPlaylistSoundLink,
     playlistSoundOptions,
-    playlistActionDisabled: !preset.playlist,
     gridTypeOptions: [
       option("", "Keep current", preset.gridType === null ? "" : preset.gridType),
       ...GRID_TYPES.map((entry) => option(entry.value, entry.label, preset.gridType))
@@ -284,12 +282,24 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
   };
 }
 
-export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
+export function readScenePresetForm(
+  form,
+  { gridSizeMax = 1000, fallbackBackgroundColor = null } = {}
+) {
   const value = (name) => form?.elements?.[name]?.value ?? "";
   const checked = (name) => form?.elements?.[name]?.checked === true;
   const weatherValue = value("weather");
   const journalValue = value("journal");
   const linkedSoundValue = value("playlistSoundLink");
+  const backgroundField = form?.elements?.backgroundColor;
+  const backgroundToggle = form?.elements?.useBackgroundColor;
+  const backgroundColor = backgroundToggle
+    ? checked("useBackgroundColor")
+      ? value("backgroundColor")
+      : ""
+    : backgroundField
+      ? value("backgroundColor")
+      : fallbackBackgroundColor;
   let playlist = null;
   let playlistSound = null;
   if (linkedSoundValue !== KEEP_CURRENT) {
@@ -310,7 +320,7 @@ export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
     gridAlpha: value("gridAlpha"),
     gridDistance: value("gridDistance"),
     gridUnits: value("gridUnits"),
-    backgroundColor: checked("useBackgroundColor") ? value("backgroundColor") : "",
+    backgroundColor,
     darkness: value("darkness"),
     tokenVision: value("tokenVision"),
     fogExploration: value("fogExploration"),
@@ -319,10 +329,8 @@ export function readScenePresetForm(form, { gridSizeMax = 1000 } = {}) {
     journal: journalValue === KEEP_CURRENT ? null : journalValue,
     playlist,
     playlistSound,
-    openJournal: checked("openJournal") && journalValue && journalValue !== KEEP_CURRENT,
-    startPlaylistSound: checked("startPlaylistSound")
-      && linkedSoundValue
-      && linkedSoundValue !== KEEP_CURRENT,
+    openJournal: journalValue && journalValue !== KEEP_CURRENT,
+    startPlaylistSound: linkedSoundValue && linkedSoundValue !== KEEP_CURRENT,
     initialX: value("initialX"),
     initialY: value("initialY"),
     initialScale: value("initialScale")
