@@ -1,59 +1,27 @@
 <div class="mg-inspector mg-scene-details" aria-label="Selected image details">
   {{#if selectedImage}}
     <div class="mg-scene-details-layout">
-      <aside class="mg-scene-details-actions" aria-label="Scene Details actions">
-        <button
-          type="submit"
-          form="mg-scene-details-form"
-          title="Save image details"
-          aria-label="Save image details"
-        >
-          <i class="fas fa-floppy-disk" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
-          data-action="set-scene-background"
-          data-path="{{selectedImage.path}}"
-          data-title="{{selectedImage.label}}"
-          title="Display image on the active Scene"
-          aria-label="Display image on the active Scene"
-        >
-          <i class="fas fa-image" aria-hidden="true"></i>
-        </button>
-        <button
-          type="button"
-          class="mg-clear-metadata"
-          data-action="clear-image-metadata"
-          data-path="{{selectedImage.path}}"
-          title="Clear the saved name, description, and Scene preset"
-          aria-label="Clear image details"
-          {{#unless selectedImage.hasMetadata}}disabled{{/unless}}
-        >
-          <i class="fas fa-eraser" aria-hidden="true"></i>
-        </button>
-
-        <div class="mg-scene-details-splitter" role="separator" aria-orientation="horizontal"></div>
-
-        <nav
-          class="mg-scene-details-section-nav"
-          role="tablist"
-          aria-orientation="vertical"
-          aria-label="Scene settings sections"
-        >
+      <nav
+        class="mg-scene-details-section-nav"
+        role="tablist"
+        aria-orientation="vertical"
+        aria-label="Scene settings sections"
+      >
           <button
             type="button"
-            id="mg-scene-details-tab-info"
+            id="mg-scene-details-tab-basics"
             role="tab"
             data-role="settings-tab"
             data-action="open-settings-section"
-            data-section="info"
+            data-section="basics"
             aria-selected="true"
-            aria-controls="mg-scene-details-section-info"
+            aria-controls="mg-scene-details-section-basics"
             tabindex="0"
-            title="Open Info settings"
-            aria-label="Open Info settings"
+            title="Open Basics settings"
+            aria-label="Open Basics settings"
           >
             <i class="fas fa-circle-info" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Basics</span>
           </button>
           <button
             type="button"
@@ -69,6 +37,23 @@
             aria-label="Open Grid settings"
           >
             <i class="fas fa-border-all" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Grid</span>
+          </button>
+          <button
+            type="button"
+            id="mg-scene-details-tab-light-sources"
+            role="tab"
+            data-role="settings-tab"
+            data-action="open-settings-section"
+            data-section="light-sources"
+            aria-selected="false"
+            aria-controls="mg-scene-details-section-light-sources"
+            tabindex="-1"
+            title="Open Light Sources settings"
+            aria-label="Open Light Sources settings"
+          >
+            <i class="fas fa-lightbulb" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Lights</span>
           </button>
           <button
             type="button"
@@ -84,6 +69,7 @@
             aria-label="Open Vision settings"
           >
             <i class="fas fa-eye" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Vision</span>
           </button>
           <button
             type="button"
@@ -99,6 +85,7 @@
             aria-label="Open Journal settings"
           >
             <i class="fas fa-book-open" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Journal</span>
           </button>
           <button
             type="button"
@@ -114,50 +101,47 @@
             aria-label="Open Audio settings"
           >
             <i class="fas fa-volume-high" aria-hidden="true"></i>
+            <span class="mg-scene-details-nav-label">Audio</span>
           </button>
-          <button
-            type="button"
-            id="mg-scene-details-tab-initial-view"
-            role="tab"
-            data-role="settings-tab"
-            data-action="open-settings-section"
-            data-section="initial-view"
-            aria-selected="false"
-            aria-controls="mg-scene-details-section-initial-view"
-            tabindex="-1"
-            title="Open Initial View settings"
-            aria-label="Open Initial View settings"
-          >
-            <i class="fas fa-arrows-to-circle" aria-hidden="true"></i>
-          </button>
-        </nav>
-      </aside>
+      </nav>
 
       <div class="mg-scene-details-body">
         <div class="mg-inspector-scroll">
 
-      {{#if selectedImage.isVideo}}
-        <video
-          class="mg-inspector-preview mg-video"
-          src="{{selectedImage.url}}"
-          aria-label="{{selectedImage.label}}"
-          autoplay
-          muted
-          loop
-          playsinline
-          controls
-          preload="metadata"
-        ></video>
-      {{else}}
-        <img
-          class="mg-inspector-preview"
-          src="{{selectedImage.url}}"
-          alt="{{selectedImage.label}}"
-        >
-      {{/if}}
-      <div class="mg-inspector-path" title="{{selectedImage.path}}">
-        {{selectedImage.path}}
-      </div>
+        <div class="mg-scene-details-hero">
+          <div class="mg-inspector-preview-frame">
+            {{#if selectedImage.isVideo}}
+              <video
+                class="mg-inspector-preview mg-video"
+                src="{{selectedImage.url}}"
+                aria-label="{{selectedImage.label}}"
+                autoplay
+                muted
+                loop
+                playsinline
+                controls
+                preload="metadata"
+              ></video>
+            {{else}}
+              <img
+                class="mg-inspector-preview"
+                src="{{selectedImage.url}}"
+                alt="{{selectedImage.label}}"
+                loading="eager"
+                decoding="async"
+              >
+            {{/if}}
+          </div>
+          <div class="mg-scene-details-badges" aria-label="Media status">
+            <span class="mg-scene-details-badge">{{#if selectedImage.isVideo}}Video{{else}}Image{{/if}}</span>
+            {{#if selectedImage.hasScenePreset}}
+              <span class="mg-scene-details-badge is-accent">Preset saved</span>
+            {{/if}}
+            {{#if selectedImage.hasMetadata}}
+              <span class="mg-scene-details-badge">Metadata saved</span>
+            {{/if}}
+          </div>
+        </div>
 
       <form
         id="mg-scene-details-form"
@@ -166,15 +150,15 @@
         data-path="{{selectedImage.path}}"
       >
         <section
-          id="mg-scene-details-section-info"
+          id="mg-scene-details-section-basics"
           role="tabpanel"
-          aria-labelledby="mg-scene-details-tab-info"
+          aria-labelledby="mg-scene-details-tab-basics"
           data-role="settings-section"
-          data-section="info"
+          data-section="basics"
           class="mg-preset-section mg-settings-panel is-active"
           aria-hidden="false"
         >
-          <h3 class="mg-settings-panel-title">Info</h3>
+          <h3 class="mg-settings-panel-title">Basics</h3>
           <div class="mg-preset-fields">
             <label class="is-full">
               <span>Name</span>
@@ -189,16 +173,6 @@
             </label>
 
             <label class="is-full">
-              <span>Description</span>
-              <textarea
-                name="description"
-                rows="6"
-                maxlength="5000"
-                placeholder="Add notes about this scene"
-              >{{selectedImage.description}}</textarea>
-            </label>
-
-            <label class="is-full">
               <span>Tags</span>
               <input
                 type="text"
@@ -210,6 +184,67 @@
               >
               <small>Separate tags with commas. Tags are saved in lowercase.</small>
             </label>
+
+            <div
+              class="mg-preset-form-row mg-initial-view-position"
+              role="group"
+              aria-labelledby="mg-initial-view-position-label"
+            >
+              <span id="mg-initial-view-position-label" class="mg-preset-row-label">
+                Initial View Position
+              </span>
+              <div class="mg-initial-view-controls">
+                <button
+                  type="button"
+                  class="mg-initial-view-copy"
+                  data-action="copy-scene-preset"
+                  data-preset-section="initial-view"
+                  title="Copy the Initial View position from the active Scene"
+                  aria-label="Copy the Initial View position from the active Scene"
+                  {{#unless selectedSceneAvailable}}disabled{{/unless}}
+                >
+                  <i class="fas fa-arrows-to-circle" aria-hidden="true"></i>
+                </button>
+                <label>
+                  <span>X</span>
+                  <input
+                    type="number"
+                    name="initialX"
+                    value="{{selectedImage.scenePresetForm.initialX}}"
+                    step="1"
+                    placeholder="Keep"
+                    aria-label="Initial View X position"
+                  >
+                </label>
+                <label>
+                  <span>Y</span>
+                  <input
+                    type="number"
+                    name="initialY"
+                    value="{{selectedImage.scenePresetForm.initialY}}"
+                    step="1"
+                    placeholder="Keep"
+                    aria-label="Initial View Y position"
+                  >
+                </label>
+                <label class="mg-initial-view-zoom">
+                  <span>Zoom</span>
+                  <input
+                    type="number"
+                    name="initialScale"
+                    value="{{selectedImage.scenePresetForm.initialScale}}"
+                    min="0.1"
+                    max="3"
+                    step="0.01"
+                    placeholder="Keep"
+                    aria-label="Initial View zoom"
+                  >
+                </label>
+              </div>
+              <small>
+                Set the default camera position shown the first time this Scene is viewed.
+              </small>
+            </div>
           </div>
         </section>
 
@@ -223,19 +258,20 @@
           aria-hidden="true"
           hidden
         >
-          <div class="mg-preset-heading">
-            <span>Scene preset</span>
+          <div class="mg-settings-panel-heading">
+            <h3 class="mg-settings-panel-title">Grid</h3>
             <button
               type="button"
+              class="mg-copy-section"
               data-action="copy-scene-preset"
-              title="Copy all supported settings from the active Scene"
+              data-preset-section="grid"
+              title="Copy Grid settings from the active Scene"
               {{#unless selectedSceneAvailable}}disabled{{/unless}}
             >
-              <i class="fas fa-camera" aria-hidden="true"></i>
-              Copy Current
+              <i class="fas fa-copy" aria-hidden="true"></i>
+              <span>Copy Current Scene</span>
             </button>
           </div>
-          <h3 class="mg-settings-panel-title">Grid</h3>
           <div class="mg-preset-fields">
             <label class="is-full">
               <span>Grid type</span>
@@ -314,6 +350,46 @@
         </section>
 
         <section
+          id="mg-scene-details-section-light-sources"
+          role="tabpanel"
+          aria-labelledby="mg-scene-details-tab-light-sources"
+          data-role="settings-section"
+          data-section="light-sources"
+          class="mg-preset-section mg-settings-panel"
+          aria-hidden="true"
+          hidden
+        >
+          <div class="mg-settings-panel-heading">
+            <h3 class="mg-settings-panel-title">Light Sources</h3>
+            <button
+              type="button"
+              class="mg-copy-section"
+              data-action="copy-scene-preset"
+              data-preset-section="light-sources"
+              title="Copy Light Sources from the active Scene"
+              {{#unless selectedSceneAvailable}}disabled{{/unless}}
+            >
+              <i class="fas fa-copy" aria-hidden="true"></i>
+              <span>Copy Current Scene</span>
+            </button>
+          </div>
+          <div class="mg-preset-fields">
+            <label class="is-full mg-light-source-summary">
+              <span>Stored sources</span>
+              <output data-role="light-source-summary">{{selectedImage.scenePresetForm.lightSourcesSummary}}</output>
+            </label>
+          </div>
+          <input
+            type="hidden"
+            name="lightSources"
+            value="{{selectedImage.scenePresetForm.lightSourcesJson}}"
+          >
+          <small class="mg-linked-note">
+            Copy Current Scene captures all Ambient Light sources from the active Scene. Applying this preset replaces the Scene's current light sources.
+          </small>
+        </section>
+
+        <section
           id="mg-scene-details-section-vision"
           role="tabpanel"
           aria-labelledby="mg-scene-details-tab-vision"
@@ -323,31 +399,86 @@
           aria-hidden="true"
           hidden
         >
-          <h3 class="mg-settings-panel-title">Vision</h3>
+          <div class="mg-settings-panel-heading">
+            <h3 class="mg-settings-panel-title">Vision</h3>
+            <button
+              type="button"
+              class="mg-copy-section"
+              data-action="copy-scene-preset"
+              data-preset-section="vision"
+              title="Copy Vision settings from the active Scene"
+              {{#unless selectedSceneAvailable}}disabled{{/unless}}
+            >
+              <i class="fas fa-copy" aria-hidden="true"></i>
+              <span>Copy Current Scene</span>
+            </button>
+          </div>
           <div class="mg-preset-fields">
-            <label>
+            <label class="mg-slider-field">
               <span>Darkness</span>
+              <div
+                class="mg-preset-slider"
+                data-role="preset-slider"
+                data-field="darkness"
+                data-fallback="0"
+                data-empty-label="Keep current"
+              >
+                <input
+                  type="range"
+                  data-role="slider-range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  aria-label="Darkness"
+                >
+                <output data-role="slider-output">Keep current</output>
+                <button
+                  type="button"
+                  data-role="slider-reset"
+                  title="Keep the current Scene darkness"
+                  aria-label="Keep the current Scene darkness"
+                >
+                  <i class="fas fa-rotate-left" aria-hidden="true"></i>
+                </button>
+              </div>
               <input
-                type="number"
+                type="hidden"
                 name="darkness"
                 value="{{selectedImage.scenePresetForm.darkness}}"
-                min="0"
-                max="1"
-                step="0.05"
-                placeholder="Keep"
               >
             </label>
 
-            <label>
+            <label class="mg-slider-field">
               <span>Padding</span>
+              <div
+                class="mg-preset-slider"
+                data-role="preset-slider"
+                data-field="padding"
+                data-fallback="0.25"
+                data-empty-label="Keep current"
+              >
+                <input
+                  type="range"
+                  data-role="slider-range"
+                  min="0"
+                  max="0.5"
+                  step="0.05"
+                  aria-label="Padding"
+                >
+                <output data-role="slider-output">Keep current</output>
+                <button
+                  type="button"
+                  data-role="slider-reset"
+                  title="Keep the current Scene padding"
+                  aria-label="Keep the current Scene padding"
+                >
+                  <i class="fas fa-rotate-left" aria-hidden="true"></i>
+                </button>
+              </div>
               <input
-                type="number"
+                type="hidden"
                 name="padding"
                 value="{{selectedImage.scenePresetForm.padding}}"
-                min="0"
-                max="0.5"
-                step="0.05"
-                placeholder="Keep"
               >
             </label>
 
@@ -385,9 +516,6 @@
             </label>
 
           </div>
-          <small class="mg-preset-warning">
-            Changing Scene padding can reposition placed canvas elements.
-          </small>
         </section>
 
         <section
@@ -429,7 +557,7 @@
             </label>
           </div>
           <small class="mg-linked-note">
-            A selected Journal Entry opens automatically when this image is displayed.
+            The selected Journal Entry opens automatically when this image is displayed.
           </small>
         </section>
 
@@ -472,65 +600,55 @@
             </label>
           </div>
           <small class="mg-linked-note">
-            A selected Playlist or Playlist Sound starts automatically when this image is displayed.
+            The selected Playlist or Playlist Sound starts automatically when this image is displayed.
           </small>
         </section>
 
-        <section
-          id="mg-scene-details-section-initial-view"
-          role="tabpanel"
-          aria-labelledby="mg-scene-details-tab-initial-view"
-          data-role="settings-section"
-          data-section="initial-view"
-          class="mg-preset-section mg-settings-panel"
-          aria-hidden="true"
-          hidden
-        >
-          <h3 class="mg-settings-panel-title">Initial View</h3>
-          <div class="mg-preset-fields">
-            <label>
-              <span>Center X</span>
-              <input
-                type="number"
-                name="initialX"
-                value="{{selectedImage.scenePresetForm.initialX}}"
-                step="1"
-                placeholder="Keep"
-              >
-            </label>
-
-            <label>
-              <span>Center Y</span>
-              <input
-                type="number"
-                name="initialY"
-                value="{{selectedImage.scenePresetForm.initialY}}"
-                step="1"
-                placeholder="Keep"
-              >
-            </label>
-
-            <label class="is-full">
-              <span>Zoom</span>
-              <input
-                type="number"
-                name="initialScale"
-                value="{{selectedImage.scenePresetForm.initialScale}}"
-                min="0.1"
-                max="3"
-                step="0.01"
-                placeholder="Keep current"
-              >
-            </label>
-          </div>
-        </section>
-
-        <small class="mg-preset-note">
-          Blank values preserve the active Scene setting. Saved values are applied before display.
-        </small>
-
         </form>
         </div>
+        <footer class="mg-scene-details-footer" aria-label="Scene Details actions">
+          <div class="mg-scene-details-status" data-role="dirty-indicator" aria-live="polite" hidden>
+            <i class="fas fa-circle-exclamation" aria-hidden="true"></i>
+            <span>Unsaved changes</span>
+          </div>
+          <div class="mg-scene-details-footer-actions">
+            <button
+              type="submit"
+              form="mg-scene-details-form"
+              class="mg-scene-details-primary"
+              data-role="save-details"
+              title="Save image details"
+              aria-label="Save image details"
+              disabled
+            >
+              <i class="fas fa-floppy-disk" aria-hidden="true"></i>
+              <span>Save</span>
+            </button>
+            <button
+              type="button"
+              data-action="set-scene-background"
+              data-path="{{selectedImage.path}}"
+              data-title="{{selectedImage.label}}"
+              title="Display image on the active Scene"
+              aria-label="Display image on the active Scene"
+            >
+              <i class="fas fa-image" aria-hidden="true"></i>
+              <span>Set Background</span>
+            </button>
+            <button
+              type="button"
+              class="mg-clear-metadata"
+              data-action="clear-image-metadata"
+              data-path="{{selectedImage.path}}"
+              title="Clear the saved name, description, and Scene preset"
+              aria-label="Clear image details"
+              {{#unless selectedImage.hasMetadata}}disabled{{/unless}}
+            >
+              <i class="fas fa-eraser" aria-hidden="true"></i>
+              <span>Clear</span>
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   {{else}}

@@ -2,12 +2,12 @@ import { MODULE_ID } from "./settings.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const SETTINGS_SECTION_IDS = Object.freeze({
-  info: "mg-scene-details-section-info",
+  basics: "mg-scene-details-section-basics",
   grid: "mg-scene-details-section-grid",
+  "light-sources": "mg-scene-details-section-light-sources",
   vision: "mg-scene-details-section-vision",
   journal: "mg-scene-details-section-journal",
-  audio: "mg-scene-details-section-audio",
-  "initial-view": "mg-scene-details-section-initial-view"
+  audio: "mg-scene-details-section-audio"
 });
 
 export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -19,7 +19,7 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "mg-scene-details-window"
     ],
     position: {
-      width: 470,
+      width: 640,
       height: 780
     },
     window: {
@@ -58,7 +58,7 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
     super(options);
     this.gallery = gallery;
     this.image = image;
-    this._activeSection = "info";
+    this._activeSection = "basics";
     this._formDirty = false;
     this._drafts = new Map();
   }
@@ -75,13 +75,23 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   setImage(image) {
     this._captureDraft();
-    if (this.image?.path !== image?.path) this._activeSection = "info";
+    if (this.image?.path !== image?.path) this._activeSection = "basics";
     this.image = image;
   }
 
   _safeRender(force = false) {
     this._captureDraft();
     this.render({ force });
+  }
+
+  _setFormDirty(dirty, root = this.element) {
+    this._formDirty = !!dirty;
+
+    const saveButton = root?.querySelector?.("[data-role='save-details']");
+    if (saveButton) saveButton.disabled = !this._formDirty;
+
+    const dirtyIndicator = root?.querySelector?.("[data-role='dirty-indicator']");
+    if (dirtyIndicator) dirtyIndicator.hidden = !this._formDirty;
   }
 
   _captureDraft() {
@@ -133,7 +143,7 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _clearDraft(path = this.image?.path) {
     if (path) this._drafts.delete(path);
-    this._formDirty = false;
+    this._setFormDirty(false);
   }
 
   async _prepareContext(options) {
@@ -157,18 +167,76 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     const root = this.element;
     this._restoreDraft(root);
+    this._setFormDirty(this._formDirty, root);
 
     const form = root.querySelector("[data-role='image-details-form']");
     form?.addEventListener("input", () => {
-      this._formDirty = true;
+      this._setFormDirty(true, root);
     });
     form?.addEventListener("change", () => {
-      this._formDirty = true;
+      this._setFormDirty(true, root);
     });
     form?.addEventListener("submit", (event) => this._saveImageDetails(event));
 
+    this._bindPresetSliders(root);
     this._bindDocumentDropControls(root);
     this._bindSectionTabs(root);
+  }
+
+  _formatPresetSliderValue(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "";
+    return number.toFixed(2).replace(/\.?0+$/, "");
+  }
+
+  _syncPresetSliders(root = this.element) {
+    const form = root?.querySelector?.("[data-role='image-details-form']");
+    if (!form) return;
+
+    for (const control of Array.from(
+      root.querySelectorAll("[data-role='preset-slider']")
+    )) {
+      const field = form.elements?.[control.dataset.field];
+      const range = control.querySelector("[data-role='slider-range']");
+      const output = control.querySelector("[data-role='slider-output']");
+      const reset = control.querySelector("[data-role='slider-reset']");
+      if (!field || !range || !output) continue;
+
+      const hasValue = String(field.value ?? "").trim() !== "";
+      range.value = hasValue ? field.value : control.dataset.fallback ?? range.min;
+      output.textContent = hasValue
+        ? this._formatPresetSliderValue(field.value)
+        : control.dataset.emptyLabel || "Keep current";
+      if (reset) reset.disabled = !hasValue;
+    }
+  }
+
+  _bindPresetSliders(root) {
+    const form = root?.querySelector?.("[data-role='image-details-form']");
+    if (!form) return;
+
+    for (const control of Array.from(
+      root.querySelectorAll("[data-role='preset-slider']")
+    )) {
+      const field = form.elements?.[control.dataset.field];
+      const range = control.querySelector("[data-role='slider-range']");
+      const reset = control.querySelector("[data-role='slider-reset']");
+      if (!field || !range) continue;
+
+      range.addEventListener("input", () => {
+        field.value = range.value;
+        this._syncPresetSliders(root);
+      });
+      reset?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        field.value = "";
+        this._syncPresetSliders(root);
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+
+    this._syncPresetSliders(root);
   }
 
   _bindSectionTabs(root) {
@@ -400,12 +468,13 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     field.value = "";
     field.dispatchEvent(new Event("change", { bubbles: true }));
-    this._formDirty = true;
+    this._setFormDirty(true);
   }
 
   _copyCurrentScenePreset(event, target = event.currentTarget) {
     this.gallery?._copyCurrentScenePreset(event, target);
-    this._formDirty = true;
+    this._syncPresetSliders();
+    this._setFormDirty(true);
   }
 
   async _clearImageMetadata(event, target = event.currentTarget) {

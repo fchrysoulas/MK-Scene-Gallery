@@ -82,6 +82,46 @@ function colorOrNull(value) {
   return /^#[0-9a-f]{6}$/i.test(color) ? color : null;
 }
 
+function cloneLightSource(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  try {
+    const clone = typeof globalThis.foundry?.utils?.deepClone === "function"
+      ? globalThis.foundry.utils.deepClone(value)
+      : JSON.parse(JSON.stringify(value));
+    if (!clone || typeof clone !== "object" || Array.isArray(clone)) return null;
+    delete clone._id;
+    delete clone.id;
+    delete clone._stats;
+    return clone;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeLightSources(value) {
+  if (!Array.isArray(value)) return null;
+  return value.map((light) => cloneLightSource(light)).filter(Boolean);
+}
+
+function captureSceneLightSources(scene) {
+  return normalizeLightSources(
+    Array.from(scene?.lights ?? []).map((light) => (
+      typeof light?.toObject === "function" ? light.toObject() : light?._source
+    ))
+  ) ?? [];
+}
+
+function parseLightSources(value) {
+  if (!value) return null;
+
+  try {
+    return normalizeLightSources(JSON.parse(value));
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}) {
   const preset = rawPreset && typeof rawPreset === "object" && !Array.isArray(rawPreset)
     ? rawPreset
@@ -120,7 +160,8 @@ export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}
     startPlaylistSound: enabledOrNull(preset.startPlaylistSound),
     initialX: floorOrNull(preset.initialX),
     initialY: floorOrNull(preset.initialY),
-    initialScale: roundOrNull(clampOrNull(preset.initialScale, 0.1, 3), 2)
+    initialScale: roundOrNull(clampOrNull(preset.initialScale, 0.1, 3), 2),
+    lightSources: normalizeLightSources(preset.lightSources)
   };
 }
 
@@ -261,6 +302,10 @@ export function prepareScenePresetForm(rawPreset, { gridSizeMax = 1000 } = {}) {
     backgroundColorValue: preset.backgroundColor ?? "#000000",
     backgroundColorEnabled: preset.backgroundColor !== null,
     initialScale: preset.initialScale === null ? null : preset.initialScale.toFixed(2),
+    lightSourcesJson: preset.lightSources === null ? "" : JSON.stringify(preset.lightSources),
+    lightSourcesSummary: preset.lightSources === null
+      ? "Keep current"
+      : `${preset.lightSources.length} light source${preset.lightSources.length === 1 ? "" : "s"} stored`,
     journalOptions,
     playlistSoundLink: selectedPlaylistSoundLink,
     playlistSoundOptions,
@@ -333,7 +378,8 @@ export function readScenePresetForm(
     startPlaylistSound: linkedSoundValue && linkedSoundValue !== KEEP_CURRENT,
     initialX: value("initialX"),
     initialY: value("initialY"),
-    initialScale: value("initialScale")
+    initialScale: value("initialScale"),
+    lightSources: parseLightSources(value("lightSources"))
   }, { gridSizeMax });
 }
 
@@ -371,8 +417,24 @@ export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
     startPlaylistSound: null,
     initialX: currentView.x ?? initial.x,
     initialY: currentView.y ?? initial.y,
-    initialScale: currentView.scale ?? initial.scale
+    initialScale: currentView.scale ?? initial.scale,
+    lightSources: captureSceneLightSources(scene)
   }, { gridSizeMax });
+}
+
+async function replaceSceneLightSources(scene, lightSources) {
+  const existingIds = Array.from(scene?.lights ?? [])
+    .map((light) => light?.id ?? light?._id)
+    .filter(Boolean);
+
+  if (existingIds.length) {
+    await scene.deleteEmbeddedDocuments("AmbientLight", existingIds);
+  }
+
+  if (lightSources.length) {
+    const data = lightSources.map((light) => cloneLightSource(light)).filter(Boolean);
+    if (data.length) await scene.createEmbeddedDocuments("AmbientLight", data);
+  }
 }
 
 export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } = {}) {
@@ -405,9 +467,9 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
   if (preset.playlist !== null) update.playlist = preset.playlist || null;
   if (preset.playlistSound !== null) update.playlistSound = preset.playlistSound || null;
 
-  if (Object.keys(update).length === 0) {
-    return { changed: false, gridChanged: false, preset };
-  }
+  const lightSourcesChanged = Array.isArray(preset.lightSources);
+  const sceneChanged = Object.keys(update).length > 0 || lightSourcesChanged;
+  if (!sceneChanged) return { changed: false, gridChanged: false, preset };
 
   const previousGridSize = Number(scene?.grid?.size);
   const gridChanged = preset.gridSize !== null
@@ -415,10 +477,11 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
     && previousGridSize > 0
     && preset.gridSize !== previousGridSize;
 
-  await scene.update(update);
-  if (gridChanged) {
+  if (Object.keys(update).length > 0) await scene.update(update);
+  if (lightSourcesChanged) await replaceSceneLightSources(scene, preset.lightSources);
+  if (gridChanged && !lightSourcesChanged) {
     await scaleAmbientLightRadiiForGrid(scene, previousGridSize, preset.gridSize);
   }
 
-  return { changed: true, gridChanged, preset };
+  return { changed: true, gridChanged, lightSourcesChanged, preset };
 }

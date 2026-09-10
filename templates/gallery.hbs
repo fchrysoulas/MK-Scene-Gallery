@@ -98,17 +98,13 @@
       {{/if}}
     </div>
 
-    <label class="mg-toggle">
-      <input type="checkbox" data-role="toggle-recursive" {{#if recursive}}checked{{/if}}>
-      <span>Include subfolders</span>
-    </label>
   </header>
 
-  <div class="mg-browser">
+  <div class="mg-browser {{#if sidebarCollapsed}}is-sidebar-collapsed{{/if}}">
     {{#if isIndexing}}
       <div class="mg-loading-overlay" aria-live="polite">
         <div class="mg-spinner" role="status" aria-label="Indexing media"></div>
-        <div class="mg-loading-text">
+        <div class="mg-loading-text" data-role="indexing-progress">
           Indexing media… {{indexStats.foundFiles}} files in {{indexStats.scannedDirs}} folders
         </div>
       </div>
@@ -175,21 +171,33 @@
 
     <aside class="mg-sidebar" aria-label="Library navigation">
       <div class="mg-sidebar-heading">
-        <span>Folders</span>
-        <span class="mg-sidebar-total">{{totalIndexed}}</span>
+        <div class="mg-sidebar-heading-label">
+          <span>Folders</span>
+        </div>
+        <div class="mg-sidebar-heading-tools">
+          <span class="mg-sidebar-total">{{totalIndexed}}</span>
+          <button
+            type="button"
+            class="mg-sidebar-toggle"
+            data-action="toggle-sidebar"
+            title="{{#if sidebarCollapsed}}Expand{{else}}Collapse{{/if}} folder panel"
+            aria-label="{{#if sidebarCollapsed}}Expand{{else}}Collapse{{/if}} folder panel"
+            aria-expanded="{{#if sidebarCollapsed}}false{{else}}true{{/if}}"
+          >
+            <i class="fas {{#if sidebarCollapsed}}fa-chevron-right{{else}}fa-chevron-left{{/if}}" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
 
       <div class="mg-tree-scroll">
-        <section class="mg-quick-section" aria-label="Quick access">
-          <div class="mg-pinned-heading">
-            <span><i class="fas fa-bolt" aria-hidden="true"></i> Quick access</span>
-          </div>
+        <section class="mg-quick-section" aria-label="Saved filters">
           <div class="mg-quick-list">
             <button
               type="button"
               class="mg-quick-filter {{#if favoritesSelected}}is-active{{/if}}"
               data-action="select-quick-filter"
               data-filter="favorites"
+              title="Favorites"
               aria-pressed="{{#if favoritesSelected}}true{{else}}false{{/if}}"
             >
               <i class="fas fa-star" aria-hidden="true"></i>
@@ -201,6 +209,7 @@
               class="mg-quick-filter {{#if recentSelected}}is-active{{/if}}"
               data-action="select-quick-filter"
               data-filter="recent"
+              title="Recently Displayed"
               aria-pressed="{{#if recentSelected}}true{{else}}false{{/if}}"
             >
               <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
@@ -279,13 +288,27 @@
           class="mg-tree-root {{#if tree.selected}}is-active{{/if}}"
           data-action="select-folder"
           data-folder="{{tree.fullPath}}"
-          title="Show images from every indexed folder"
+          title="{{#if baseDir}}Show images from {{baseDir}} {{#if recursive}}including subfolders{{else}}in this folder only{{/if}}{{else}}Show images from every indexed folder{{/if}}"
           {{#if tree.selected}}aria-current="page"{{/if}}
         >
           <i class="fas fa-images" aria-hidden="true"></i>
-          <span class="mg-tree-label">All media</span>
+          <span class="mg-tree-label">All Media</span>
           <span class="mg-tree-count">{{tree.totalCount}}</span>
         </button>
+
+        <label
+          class="mg-sidebar-recursive-toggle"
+          title="Include images from subfolders"
+        >
+          <i class="fas fa-folder-tree" aria-hidden="true"></i>
+          <input
+            type="checkbox"
+            data-role="toggle-recursive"
+            aria-label="Include subfolders"
+            {{#if recursive}}checked{{/if}}
+          >
+          <span>Include subfolders</span>
+        </label>
 
         {{#if tree.children.length}}
           <ul class="mg-tree mg-tree-top">
@@ -296,13 +319,20 @@
         {{/if}}
       </div>
 
-      <div class="mg-sidebar-path" title="{{baseDir}}">
-        <i class="fas fa-database" aria-hidden="true"></i>
-        <span>{{baseDir}}</span>
-      </div>
     </aside>
 
     <main class="mg-content">
+      <div
+        class="mg-loading-overlay mg-loading-more-overlay"
+        data-role="loading-more"
+        aria-live="polite"
+        aria-hidden="true"
+        hidden
+      >
+        <div class="mg-spinner" role="status" aria-label="Loading more media"></div>
+        <div class="mg-loading-text">Loading more media…</div>
+      </div>
+
       <div class="mg-content-header">
         <div class="mg-location">
           <div class="mg-location-title">
@@ -351,7 +381,14 @@
                   preload="none"
                 ></video>
               {{else}}
-                <img class="mg-img" src="{{url}}" alt="{{label}}" loading="lazy">
+                <img
+                  class="mg-img"
+                  src="{{url}}"
+                  alt="{{label}}"
+                  loading="lazy"
+                  decoding="async"
+                  fetchpriority="low"
+                >
               {{/if}}
               {{#if hasScenePreset}}
                 <span
@@ -431,11 +468,6 @@
           {{#if canLoadMore}}<span>• {{showing}} shown</span>{{/if}}
         </div>
 
-        {{#if canLoadMore}}
-          <button type="button" data-action="load-more">
-            Load more
-          </button>
-        {{/if}}
       </footer>
     </main>
 

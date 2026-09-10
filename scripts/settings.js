@@ -1,16 +1,19 @@
 export const MODULE_ID = "mk-scene-gallery";
 export const LEGACY_MODULE_ID = "share-media-gallery";
+export const DEFAULT_PAGE_SIZE = 30;
 export const DEFAULT_GRID_SIZE_MAX = 300;
-export const DEFAULT_IMAGE_TITLE_FONT_SIZE = 10;
+export const DEFAULT_IMAGE_TITLE_FONT_SIZE = 12;
 export const DEFAULT_BACKGROUND_TRANSITION_MS = 500;
 
 const DEFAULTS = {
   baseDir: "uploads/",
   recursive: true,
-  pageSize: 120,
+  pageSize: DEFAULT_PAGE_SIZE,
   pinnedFolders: [],
   favoriteImages: [],
   recentImages: [],
+  windowPosition: {},
+  sidebarCollapsed: false,
   imageTitles: {},
   imageMetadata: {},
   imageTitleFontSize: DEFAULT_IMAGE_TITLE_FONT_SIZE,
@@ -39,7 +42,7 @@ export function registerSettings() {
 
   game.settings.register(MODULE_ID, "pageSize", {
     name: "Page size",
-    hint: "How many thumbnails to render per page.",
+    hint: "Maximum number of thumbnails to add per automatic scroll batch.",
     scope: "world",
     config: false,
     type: Number,
@@ -71,6 +74,24 @@ export function registerSettings() {
     config: false,
     type: Array,
     default: DEFAULTS.recentImages
+  });
+
+  game.settings.register(MODULE_ID, "windowPosition", {
+    name: "Gallery window position",
+    hint: "Last position and size of the gallery window for this client.",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: DEFAULTS.windowPosition
+  });
+
+  game.settings.register(MODULE_ID, "sidebarCollapsed", {
+    name: "Collapsed folder panel",
+    hint: "Remember whether the gallery folder panel is collapsed for this client.",
+    scope: "client",
+    config: false,
+    type: Boolean,
+    default: DEFAULTS.sidebarCollapsed
   });
 
   game.settings.register(MODULE_ID, "imageTitles", {
