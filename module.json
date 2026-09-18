@@ -1,8 +1,8 @@
 {
   "id": "mk-scene-gallery",
   "title": "MK-Scene-Gallery",
-  "description": "Browse scene images and WebM videos as a thumbnail gallery and set them as Scene backgrounds.",
-  "version": "0.11.0",
+  "description": "Browse scene images, including WebP, and WebM videos as a thumbnail gallery and set them as Scene backgrounds.",
+  "version": "0.11.1",
   "authors": [
     {
       "name": "Mikrokouneli",
@@ -27,7 +27,7 @@
       "category": "maps-scenes",
       "status": "beta",
       "icon": "fa-solid fa-images",
-      "summary": "Browse scene images and WebM media as a gallery and assign them to Scene backgrounds.",
+      "summary": "Browse scene images, including WebP, and WebM media as a gallery and assign them to Scene backgrounds.",
       "tags": [
         "Scenes",
         "Images",
@@ -36,7 +36,7 @@
       ],
       "features": [
         "Thumbnail media gallery",
-        "Image and WebM browsing",
+        "Image, WebP, and WebM browsing",
         "Scene background assignment",
         "Fast visual scene selection"
       ]
@@ -44,5 +44,5 @@
   },
   "url": "https://github.com/fchrysoulas/MK-Scene-Gallery",
   "manifest": "https://github.com/fchrysoulas/MK-Scene-Gallery/releases/latest/download/module.json",
-  "download": "https://github.com/fchrysoulas/MK-Scene-Gallery/releases/download/v0.11.0/mk-scene-gallery.zip"
+  "download": "https://github.com/fchrysoulas/MK-Scene-Gallery/releases/download/v0.11.1/mk-scene-gallery.zip"
 }

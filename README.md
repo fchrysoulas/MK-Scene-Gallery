@@ -25,8 +25,8 @@ User Data folders and setting them as Scene backgrounds.
 
 ## Features
 
-- Browse, search, filter, favorite, and preview images and looping WebM videos
-  from a selected folder, including optional subfolders.
+- Browse, search, filter, favorite, and preview images—including WebP—and
+  looping WebM videos from a selected folder, including optional subfolders.
 - Upload files and edit image names, descriptions, and custom tags.
 - Set an image or video as the active Scene background, remove it from the
   gallery toolbar, and fade background changes made by Foundry or other modules.

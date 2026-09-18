@@ -4,6 +4,11 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.11.1
+
+- Added explicit WebP upload support; WebP files can be previewed and assigned
+  as Scene backgrounds like other gallery images.
+
 ## 0.11.0
 
 - Redesigned Scene Details with compact navigation, Foundry-style settings, and

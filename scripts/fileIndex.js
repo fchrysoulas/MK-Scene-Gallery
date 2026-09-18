@@ -1,6 +1,16 @@
 import { MODULE_ID } from "./settings.js";
 
-const MEDIA_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "avif", "svg", "webm"]);
+export const IMAGE_EXTENSIONS = Object.freeze([
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "gif",
+  "avif",
+  "svg"
+]);
+export const VIDEO_EXTENSIONS = Object.freeze(["webm"]);
+const MEDIA_EXT = new Set([...IMAGE_EXTENSIONS, ...VIDEO_EXTENSIONS]);
 const cache = new Map();
 
 function normalizeDir(path) {
@@ -21,9 +31,20 @@ export function clearIndexCache() {
   cache.clear();
 }
 
+function getMediaExtension(path) {
+  const withoutQuery = String(path).split(/[?#]/, 1)[0];
+  return (withoutQuery.split(".").pop() || "").toLowerCase();
+}
+
+export function getMediaType(path) {
+  const extension = getMediaExtension(path);
+  if (VIDEO_EXTENSIONS.includes(extension)) return "video";
+  if (IMAGE_EXTENSIONS.includes(extension)) return "image";
+  return null;
+}
+
 function isMediaPath(path) {
-  const ext = (String(path).split(".").pop() || "").toLowerCase();
-  return MEDIA_EXT.has(ext);
+  return MEDIA_EXT.has(getMediaExtension(path));
 }
 
 function withTimeout(promise, ms, label) {

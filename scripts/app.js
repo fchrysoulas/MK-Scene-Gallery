@@ -4,7 +4,7 @@ import {
   DEFAULT_PAGE_SIZE,
   MODULE_ID
 } from "./settings.js";
-import { clearIndexCache } from "./fileIndex.js";
+import { clearIndexCache, getMediaType } from "./fileIndex.js";
 import {
   getSceneBackground,
   removeSceneBackground,
@@ -644,7 +644,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
         const fullPath = String(path);
         const lastSlash = fullPath.lastIndexOf("/");
         const folder = lastSlash >= 0 ? fullPath.slice(0, lastSlash + 1) : "";
-        const isVideo = /\.webm$/i.test(fileName);
+        const isVideo = getMediaType(fileName) === "video";
 
         return {
           path,
@@ -1776,7 +1776,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
 
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*,video/webm,.webm";
+    input.accept = "image/*,image/webp,.webp,video/webm,.webm";
     input.multiple = true;
 
     input.addEventListener("change", async () => {
