@@ -409,7 +409,9 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
   }
 
   _toServedUrl(path) {
-    const raw = String(path);
+    const raw = String(path ?? "").trim();
+    if (!raw) return "";
+
     let decoded = raw;
 
     try {
@@ -419,9 +421,14 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     }
 
     const routed = foundry.utils.getRoute(decoded);
-    return (typeof foundry.utils.encodeURL === "function")
+    const encoded = (typeof foundry.utils.encodeURL === "function")
       ? foundry.utils.encodeURL(routed)
       : encodeURI(routed);
+
+    // Foundry routes are returned without a leading slash. Keep them rooted
+    // at the server origin so v14 does not resolve media relative to /game/.
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(encoded)) return encoded;
+    return encoded.startsWith("/") ? encoded : `/${encoded}`;
   }
 
   _normalizeBaseDir(baseDir) {
@@ -1939,7 +1946,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       }
 
       this._imagePreviewApp.setImage(image);
-      this._imagePreviewApp.render({ force: true });
+      await this._imagePreviewApp.render({ force: true });
     } catch (error) {
       console.error(`${MODULE_ID} | Could not load image preview`, error);
       ui.notifications.error("Could not open a preview for this image.");
@@ -1968,7 +1975,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       }
 
       this._sceneDetailsApp.setImage(image);
-      this._sceneDetailsApp.render({ force: true });
+      await this._sceneDetailsApp.render({ force: true });
     } catch (error) {
       console.error(`${MODULE_ID} | Could not load Scene Details`, error);
       ui.notifications.error("Could not open Scene Details for this image.");

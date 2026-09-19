@@ -4,6 +4,13 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.11.2
+
+- Fixed image and video previews on Foundry VTT v14 by normalizing media URLs
+  to root-relative server routes.
+- Synchronized ApplicationV2 preview rendering with v14 application lifecycle
+  updates.
+
 ## 0.11.1
 
 - Added explicit WebP upload support; WebP files can be previewed and assigned
