@@ -412,6 +412,11 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     const raw = String(path ?? "").trim();
     if (!raw) return "";
 
+    // Hosted services such as Forge return fully-qualified CDN URLs. These are
+    // already browser-ready and must not be passed through Foundry's getRoute,
+    // which would turn the URL into a local path such as /https%3A//... .
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(raw)) return raw;
+
     let decoded = raw;
 
     try {
@@ -425,9 +430,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       ? foundry.utils.encodeURL(routed)
       : encodeURI(routed);
 
-    // Foundry routes are returned without a leading slash. Keep them rooted
-    // at the server origin so v14 does not resolve media relative to /game/.
-    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(encoded)) return encoded;
+    // Keep Foundry data paths rooted at the server origin so they do not
+    // resolve relative to the current application route.
     return encoded.startsWith("/") ? encoded : `/${encoded}`;
   }
 

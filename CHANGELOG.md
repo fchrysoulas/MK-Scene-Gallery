@@ -4,6 +4,11 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.11.3
+
+- Preserved fully-qualified Forge and CDN media URLs so gallery thumbnails and
+  previews do not rewrite them as invalid local Foundry routes.
+
 ## 0.11.2
 
 - Fixed image and video previews on Foundry VTT v14 by normalizing media URLs
