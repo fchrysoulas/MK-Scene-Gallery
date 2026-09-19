@@ -176,6 +176,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     this._fileObjectsCacheTitles = null;
     this._fileObjectsCacheMetadata = null;
     this._fileObjectsCacheGridSizeMax = null;
+    this._fileObjectsCacheBaseDir = null;
     this._treeCache = null;
     this._availableTagsCache = null;
     this._visibleFilesCache = null;
@@ -441,6 +442,51 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     return normalized;
   }
 
+  _getDataFolderPath(path, baseDir) {
+    const raw = String(path ?? "").trim().replace(/\\/g, "/");
+    let dataPath = raw;
+
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(raw)) {
+      try {
+        dataPath = new URL(raw, globalThis.location?.origin || "http://localhost").pathname;
+      } catch {
+        dataPath = raw;
+      }
+    }
+
+    try {
+      dataPath = decodeURIComponent(dataPath);
+    } catch {
+      // Retain the original path if it contains malformed percent encoding.
+    }
+
+    dataPath = dataPath.replace(/\\/g, "/").replace(/^\/+/, "");
+    const lastSlash = dataPath.lastIndexOf("/");
+    const folder = lastSlash >= 0 ? dataPath.slice(0, lastSlash + 1) : "";
+
+    let base = this._normalizeBaseDir(baseDir).replace(/^\/+/, "");
+    if (!base) return folder;
+
+    try {
+      base = decodeURIComponent(base);
+    } catch {
+      // Retain the configured directory if it contains malformed encoding.
+    }
+    base = this._normalizeBaseDir(base.replace(/\\/g, "/").replace(/^\/+/, ""));
+
+    if (folder.startsWith(base)) return folder;
+
+    // Forge CDN paths include an account prefix before the Foundry data path.
+    // Locate the configured base directory at a path boundary and discard only
+    // the hosting prefix so folder navigation remains data-source relative.
+    const rootedFolder = `/${folder}`;
+    const marker = `/${base}`;
+    const markerIndex = rootedFolder.indexOf(marker);
+    if (markerIndex >= 0) return rootedFolder.slice(markerIndex + 1);
+
+    return base;
+  }
+
   _splitFolderParts(folderRel) {
     const rel = String(folderRel || "").replace(/^\/+/, "").replace(/\/+$/, "");
     if (!rel) return [];
@@ -460,6 +506,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     this._fileObjectsCacheTitles = null;
     this._fileObjectsCacheMetadata = null;
     this._fileObjectsCacheGridSizeMax = null;
+    this._fileObjectsCacheBaseDir = null;
     this._treeCache = null;
     this._availableTagsCache = null;
     this._visibleFilesCache = null;
@@ -595,6 +642,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
 
   _getFileObjects() {
     const files = this.files || [];
+    const baseDir = this._normalizeBaseDir(this._getBaseDir());
     const savedTitles = game.settings.get(MODULE_ID, "imageTitles");
     const imageTitles = savedTitles && typeof savedTitles === "object" && !Array.isArray(savedTitles)
       ? savedTitles
@@ -612,7 +660,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       && this._fileObjectsCacheLength === files.length
       && this._fileObjectsCacheTitles === savedTitles
       && this._fileObjectsCacheMetadata === savedMetadata
-      && this._fileObjectsCacheGridSizeMax === gridSizeMax;
+      && this._fileObjectsCacheGridSizeMax === gridSizeMax
+      && this._fileObjectsCacheBaseDir === baseDir;
 
     if (!cacheValid) {
       this._fileObjectsCache = files.map((path) => {
@@ -652,9 +701,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
         const gridSize = scenePreset.gridSize ?? "";
         const label = customTitle || fileName;
         const url = this._toServedUrl(path);
-        const fullPath = String(path);
-        const lastSlash = fullPath.lastIndexOf("/");
-        const folder = lastSlash >= 0 ? fullPath.slice(0, lastSlash + 1) : "";
+        const folder = this._getDataFolderPath(path, baseDir);
         const isVideo = getMediaType(fileName) === "video";
 
         return {
@@ -684,6 +731,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       this._fileObjectsCacheTitles = savedTitles;
       this._fileObjectsCacheMetadata = savedMetadata;
       this._fileObjectsCacheGridSizeMax = gridSizeMax;
+      this._fileObjectsCacheBaseDir = baseDir;
       this._treeCache = null;
       this._availableTagsCache = null;
     }

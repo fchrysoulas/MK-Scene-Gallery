@@ -4,6 +4,11 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.11.4
+
+- Normalized Forge CDN paths back to data-source-relative folders so the
+  gallery tree mirrors the configured Foundry directory structure.
+
 ## 0.11.3
 
 - Preserved fully-qualified Forge and CDN media URLs so gallery thumbnails and
