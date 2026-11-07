@@ -12,6 +12,7 @@ const DEFAULTS = {
   pinnedFolders: [],
   favoriteImages: [],
   recentImages: [],
+  virtualFolders: [],
   windowPosition: {},
   sidebarCollapsed: false,
   imageTitles: {},
@@ -101,6 +102,15 @@ export function registerSettings() {
     config: false,
     type: Object,
     default: DEFAULTS.imageTitles
+  });
+
+  game.settings.register(MODULE_ID, "virtualFolders", {
+    name: "Virtual gallery folders",
+    hint: "World-wide image groups. Media files remain in their original data folders.",
+    scope: "world",
+    config: false,
+    type: Array,
+    default: DEFAULTS.virtualFolders
   });
 
   game.settings.register(MODULE_ID, "imageMetadata", {

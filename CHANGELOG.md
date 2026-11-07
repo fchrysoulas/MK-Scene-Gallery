@@ -4,6 +4,12 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.12.0
+
+- Added persistent virtual folders with creation, renaming, deletion, individual
+  and batch moves, and drag-and-drop grouping without moving media files.
+- Added selection controls and automatic virtual-folder grouping for uploads.
+
 ## 0.11.4
 
 - Normalized Forge CDN paths back to data-source-relative folders so the

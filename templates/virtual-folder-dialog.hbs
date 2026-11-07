@@ -1,0 +1,28 @@
+{{#if editName}}
+  <div class="form-group">
+    <label for="mg-virtual-folder-name">Folder name</label>
+    <div class="form-fields">
+      <input id="mg-virtual-folder-name" name="folderName" type="text" value="{{name}}" maxlength="100" required autofocus>
+    </div>
+  </div>
+  <p class="hint">Virtual folders group media in this world. Files stay in their original data folders.</p>
+{{/if}}
+{{#if moveImages}}
+  <p>Move {{count}} selected media item(s) to:</p>
+  <div class="form-group">
+    <label for="mg-virtual-folder-destination">Virtual folder</label>
+    <div class="form-fields">
+      <select id="mg-virtual-folder-destination" name="folderId" autofocus>
+        {{#each folders}}
+          <option value="{{id}}">{{name}}</option>
+        {{/each}}
+        <option value="">Remove from virtual folders</option>
+      </select>
+    </div>
+  </div>
+  <p class="hint">Each image belongs to one virtual folder. Files remain available in All Media and their source folders.</p>
+{{/if}}
+{{#if deleteFolder}}
+  <p>Delete the virtual folder <strong>{{name}}</strong>?</p>
+  <p>Its images will remain in All Media and their source folders. No media files will be deleted.</p>
+{{/if}}

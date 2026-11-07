@@ -818,6 +818,127 @@
   color: var(--mg-danger);
 }
 
+.mg-virtual-section {
+  margin: 0 0 12px;
+}
+
+.mg-virtual-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 6px 6px 9px;
+  color: var(--mg-muted);
+  font-size: 12px;
+}
+
+.mg-virtual-hint {
+  margin: 3px 9px;
+  color: var(--mg-faint);
+  font-size: 12px;
+}
+
+.mg-virtual-row .mg-tree-folder {
+  padding-left: 9px;
+}
+
+.mg-virtual-edit {
+  flex: 0 0 24px;
+  width: 24px;
+  min-height: 28px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mg-faint);
+  font-size: 10px;
+}
+
+.mg-virtual-edit:hover,
+.mg-virtual-edit:focus-visible {
+  color: var(--mg-accent-bright);
+}
+
+.mg-virtual-row.is-drop-target {
+  outline: 2px solid var(--mg-accent);
+  background: var(--mg-accent-soft);
+}
+
+.mg-browser.is-sidebar-collapsed .mg-virtual-heading {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.mg-browser.is-sidebar-collapsed .mg-virtual-heading > span,
+.mg-browser.is-sidebar-collapsed .mg-virtual-hint,
+.mg-browser.is-sidebar-collapsed .mg-virtual-edit {
+  display: none;
+}
+
+.mg-selection-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 15px;
+  border-bottom: 1px solid var(--mg-border);
+  color: var(--mg-muted);
+  font-size: 12px;
+}
+
+.mg-selection-bar button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 28px;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--mg-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--mg-text);
+  font-size: 12px;
+}
+
+.mg-selection-bar button:disabled {
+  opacity: 0.4;
+}
+
+.mg-card-name-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.mg-card-name-row .mg-name {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.mg-select-image {
+  width: 20px;
+  height: 22px;
+  min-height: 22px;
+  flex: 0 0 20px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mg-muted);
+}
+
+.mg-select-image[aria-pressed="true"],
+.mg-select-image:hover,
+.mg-select-image:focus-visible {
+  color: var(--mg-accent-bright);
+}
+
+.mg-thumb.is-folder-selected {
+  border-color: var(--mg-accent);
+  background: var(--mg-accent-soft);
+}
+
 .mg-tree-divider {
   height: 1px;
   margin: 0 6px 9px;

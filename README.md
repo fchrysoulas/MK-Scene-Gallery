@@ -28,6 +28,8 @@ User Data folders and setting them as Scene backgrounds.
 - Browse, search, filter, favorite, and preview images—including WebP—and
   looping WebM videos from a selected folder, including optional subfolders.
 - Upload files and edit image names, descriptions, and custom tags.
+- Create world-wide virtual folders and move images into them individually,
+  in batches, or by dragging thumbnails onto a folder. Files stay in place.
 - Set an image or video as the active Scene background, remove it from the
   gallery toolbar, and fade background changes made by Foundry or other modules.
 - Save per-image Scene presets for grid, vision, fog, weather, lighting,
@@ -59,6 +61,22 @@ the gallery directly.
    dropdowns; use the clear button at the end of either field to remove a link.
 6. Click **Display** to apply the image and its saved Scene preset to the active
    Scene. Use **Remove scene image** to clear the background.
+
+### Virtual folders
+
+Use the **Create virtual folder** button beside **Virtual folders** in the
+sidebar. Select images using the square beside each title (or **Select shown**),
+then click **Move to folder**. You can also use a thumbnail's folder button or
+drag it onto a virtual folder; dragging a selected image moves the whole
+selection. Moving an image replaces its previous virtual-folder assignment.
+Choose **Remove from virtual folders** in the move dialog to ungroup it.
+
+Virtual folders are saved with the world and shared by its GMs. They show only
+media in the current gallery index, so include subfolders or choose the source
+directory needed to see the images. All Media and physical folders continue to
+show the original files. Uploading while viewing a virtual folder stores files
+in the configured base directory and adds them to that virtual folder. The pen
+and trash buttons rename and delete groups; deleting a group keeps every file.
 
 ## Migration from Share Media Gallery
 

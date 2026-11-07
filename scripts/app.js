@@ -20,6 +20,7 @@ import {
   readScenePresetForm
 } from "./scenePresets.js";
 import { GalleryIndexingMixin } from "./galleryIndexing.js";
+import { GalleryFoldersMixin, moveImagesToVirtualFolder } from "./galleryFolders.js";
 import {
   getGalleryWindowTitle,
   getSavedWindowPosition,
@@ -49,7 +50,7 @@ const SCENE_PRESET_SECTION_FIELDS = Object.freeze({
   "initial-view": new Set(["initialX", "initialY", "initialScale"])
 });
 
-export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   static DEFAULT_OPTIONS = {
     id: "mk-scene-gallery-app",
     classes: ["mk-scene-gallery", "mg-glass-window"],
@@ -64,6 +65,31 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       minimizable: true
     },
     actions: {
+      "create-virtual-folder": async function (event) {
+        await this._editVirtualFolder(event);
+      },
+      "rename-virtual-folder": async function (event, target) {
+        await this._editVirtualFolder(event, target);
+      },
+      "delete-virtual-folder": async function (event, target) {
+        await this._deleteVirtualFolder(event, target);
+      },
+      "select-virtual-folder": function (event, target) {
+        this._selectVirtualFolder(event, target);
+      },
+      "toggle-folder-image-selection": function (event, target) {
+        this._toggleFolderImageSelection(event, target);
+      },
+      "select-visible-images": function () {
+        this._selectVisibleFolderImages();
+      },
+      "clear-image-selection": function () {
+        this._folderSelection.clear();
+        this._safeRender(false);
+      },
+      "move-to-virtual-folder": async function (event, target) {
+        await this._chooseVirtualFolder(event, target);
+      },
       "pick-folder": async function () {
         await this._pickFolder();
       },
@@ -143,6 +169,12 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
 
     this._openFolders = new Set();
     this._activeFolder = "";
+    this._activeVirtualFolder = "";
+    this._folderSelection = new Set();
+    this._virtualFoldersSource = null;
+    this._virtualFolders = [];
+    this._virtualFolderPaths = new Map();
+    this._folderDragHandler = (event) => this._handleFolderDrag(event);
     const savedPins = game.settings.get(MODULE_ID, "pinnedFolders");
     this._pinnedFolders = new Set(
       Array.isArray(savedPins)
@@ -759,6 +791,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       cached?.fileObjs === fileObjs
       && cached.baseDir === rootPath
       && cached.activeFolder === this._activeFolder
+      && cached.activeVirtualFolder === this._activeVirtualFolder
       && cached.quickFilter === this._quickFilter
       && cached.tagFilter === this._tagFilter
       && cached.query === query
@@ -768,7 +801,10 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
 
     let candidates;
 
-    if (this._quickFilter === "favorites") {
+    if (this._activeVirtualFolder) {
+      const paths = this._virtualFolderPaths.get(this._activeVirtualFolder);
+      candidates = fileObjs.filter((file) => paths?.has(file.path));
+    } else if (this._quickFilter === "favorites") {
       candidates = fileObjs.filter((file) => file.favorite);
     } else if (this._quickFilter === "recent") {
       const recentOrder = new Map(this._recentImages.map((path, index) => [path, index]));
@@ -805,6 +841,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       fileObjs,
       baseDir: rootPath,
       activeFolder: this._activeFolder,
+      activeVirtualFolder: this._activeVirtualFolder,
       quickFilter: this._quickFilter,
       tagFilter: this._tagFilter,
       query,
@@ -885,8 +922,15 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     const baseDir = game.settings.get(MODULE_ID, "baseDir");
     const recursive = game.settings.get(MODULE_ID, "recursive");
     const fileObjs = this._getFileObjects();
+    const virtualFolders = this._prepareVirtualFolders(fileObjs);
+    const activeVirtualFolder = virtualFolders.find((folder) => folder.selected);
     const tree = this._buildTree(fileObjs, baseDir);
     const { filtered, visible } = this._getVisibleFiles(fileObjs, baseDir);
+    const filteredPaths = new Set(filtered.map((file) => file.path));
+    for (const path of this._folderSelection) {
+      if (!filteredPaths.has(path)) this._folderSelection.delete(path);
+    }
+    for (const file of fileObjs) file.folderSelected = this._folderSelection.has(file.path);
     this._canLoadMore = visible.length < filtered.length;
     const nodeMap = this._treeCache?.fileObjs === fileObjs
       ? this._treeCache.nodeMap
@@ -899,7 +943,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       .filter(Boolean)
       .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
     const quickFilterActive = this._quickFilter !== "all";
-    if (quickFilterActive || this._tagFilter) this._clearTreeSelection(tree);
+    if (quickFilterActive || this._tagFilter || activeVirtualFolder) this._clearTreeSelection(tree);
     const availablePaths = new Set(fileObjs.map((file) => file.path));
     const favoriteCount = fileObjs.filter((file) => file.favorite).length;
     const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
@@ -907,7 +951,10 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
 
     let activeFolderLabel;
     let activeFolderPath;
-    if (this._quickFilter === "favorites") {
+    if (activeVirtualFolder) {
+      activeFolderLabel = activeVirtualFolder.name;
+      activeFolderPath = "Virtual folder · Files stay in their source folders";
+    } else if (this._quickFilter === "favorites") {
       activeFolderLabel = this._tagFilter ? `Favorites · #${this._tagFilter}` : "Favorites";
       activeFolderPath = "Favorite images from all indexed folders";
     } else if (this._quickFilter === "recent") {
@@ -924,7 +971,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
           : "Choose a folder to begin")
         : activeNode.fullPath;
     }
-    const hasOrganizationFilter = quickFilterActive || !!this._tagFilter;
+    const hasOrganizationFilter = quickFilterActive || !!this._tagFilter || !!activeVirtualFolder;
     let emptyIcon = "fa-image";
     let emptyTitle = "This folder is empty";
     let emptyMessage = "Choose another folder or add images here.";
@@ -944,6 +991,10 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       emptyIcon = "fa-tag";
       emptyTitle = `No images tagged #${this._tagFilter}`;
       emptyMessage = "Choose another tag or edit an image's Scene Details.";
+    } else if (activeVirtualFolder) {
+      emptyIcon = "fa-folder-plus";
+      emptyTitle = "This virtual folder is empty";
+      emptyMessage = "Select images in All Media and use Move to folder, or drag them onto this folder. Only media in the current index is shown.";
     }
 
     return {
@@ -960,6 +1011,11 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       indexStats: this._indexStats,
       tree,
       pinnedFolders,
+      virtualFolders,
+      activeVirtualFolder,
+      folderSelectionCount: this._folderSelection.size,
+      hasFolderSelection: this._folderSelection.size > 0,
+      hasVisibleFiles: visible.length > 0,
       availableTags,
       sidebarCollapsed: this._sidebarCollapsed,
       favoriteCount,
@@ -994,6 +1050,9 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       root.addEventListener("contextmenu", this._galleryInteractionHandler);
       root.addEventListener("keydown", this._galleryInteractionHandler);
       root.addEventListener("error", this._galleryInteractionHandler, true);
+      for (const type of ["dragstart", "dragover", "dragleave", "drop", "dragend"]) {
+        root.addEventListener(type, this._folderDragHandler);
+      }
     }
     this._pauseActiveThumbnailVideo();
     this._thumbnailVideoObserver?.disconnect?.();
@@ -1056,6 +1115,9 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     root.removeEventListener("contextmenu", this._galleryInteractionHandler);
     root.removeEventListener("keydown", this._galleryInteractionHandler);
     root.removeEventListener("error", this._galleryInteractionHandler, true);
+    for (const type of ["dragstart", "dragover", "dragleave", "drop", "dragend"]) {
+      root.removeEventListener(type, this._folderDragHandler);
+    }
     this._galleryInteractionRoot = null;
   }
 
@@ -1201,6 +1263,11 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       const hookId = Hooks.on(hookName, callback);
       this._sceneHookIds.push([hookName, hookId]);
     }
+    const settingHook = Hooks.on("updateSetting", (setting) => {
+      if (setting.key !== `${MODULE_ID}.virtualFolders`) return;
+      this._safeRender(false);
+    });
+    this._sceneHookIds.push(["updateSetting", settingHook]);
   }
 
   _onClose(options) {
@@ -1243,6 +1310,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
     if (folder === undefined) return;
 
     this._activeFolder = folder;
+    this._activeVirtualFolder = "";
+    this._folderSelection.clear();
     this._quickFilter = "all";
     this._tagFilter = "";
     this._openFolderAncestors(folder);
@@ -1453,6 +1522,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
   }
 
   _selectQuickFilter(event, target = event.currentTarget) {
+    this._activeVirtualFolder = "";
+    this._folderSelection.clear();
     event.preventDefault();
     event.stopPropagation();
 
@@ -1465,6 +1536,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
   }
 
   _selectTagFilter(event, target = event.currentTarget) {
+    this._activeVirtualFolder = "";
+    this._folderSelection.clear();
     event.preventDefault();
     event.stopPropagation();
 
@@ -1812,7 +1885,7 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
   }
 
   async _uploadOneFile(baseDir, file) {
-    await FilePicker.upload("data", baseDir, file, {}, { notify: false });
+    return await FilePicker.upload("data", baseDir, file, {}, { notify: false });
   }
 
   async _refreshGallery() {
@@ -1831,7 +1904,8 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       ui.notifications.warn("Pick a folder first.");
       return;
     }
-    const uploadDir = this._activeFolder || baseDir;
+    const virtualFolderId = this._activeVirtualFolder;
+    const uploadDir = virtualFolderId ? baseDir : this._activeFolder || baseDir;
 
     const input = document.createElement("input");
     input.type = "file";
@@ -1847,17 +1921,29 @@ export class MediaGalleryApp extends GalleryIndexingMixin(HandlebarsApplicationM
       this._safeRender(false);
 
       let uploaded = 0;
+      const uploadedPaths = [];
       let uploadError = null;
 
       try {
         for (const file of files) {
-          await this._uploadOneFile(uploadDir, file);
+          const result = await this._uploadOneFile(uploadDir, file);
+          if (typeof result?.path === "string" && result.path) uploadedPaths.push(result.path);
           uploaded += 1;
         }
       } catch (error) {
         uploadError = error;
         console.error(`${MODULE_ID} | Upload failed`, error);
       } finally {
+        if (virtualFolderId && uploadedPaths.length) {
+          try {
+            await game.settings.set(MODULE_ID, "virtualFolders", moveImagesToVirtualFolder(
+              this._getVirtualFolders(), uploadedPaths, virtualFolderId
+            ));
+          } catch (error) {
+            console.error(`${MODULE_ID} | Uploaded media could not be grouped`, error);
+            ui.notifications.warn("Media uploaded, but could not be added to the virtual folder. Find it in All Media.");
+          }
+        }
         if (uploaded > 0) {
           clearIndexCache();
           this._resetIndexState({ activeFolder: uploadDir });

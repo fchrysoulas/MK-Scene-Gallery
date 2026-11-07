@@ -4,6 +4,7 @@ import { indexImages, getCachedIndex } from "./fileIndex.js";
 export const GalleryIndexingMixin = (Base) => class extends Base {
   _resetIndexState({ activeFolder = "" } = {}) {
     this.page = 0;
+    this._folderSelection.clear();
     this._openFolders.clear();
     this._activeFolder = activeFolder;
     if (activeFolder) this._openFolderAncestors(activeFolder);

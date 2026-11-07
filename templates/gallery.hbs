@@ -219,6 +219,38 @@
           </div>
         </section>
 
+        <section class="mg-virtual-section" aria-label="Virtual folders">
+          <div class="mg-virtual-heading">
+            <span>Virtual folders</span>
+            <button type="button" class="mg-sidebar-toggle" data-action="create-virtual-folder"
+              title="Create virtual folder" aria-label="Create virtual folder">
+              <i class="fas fa-folder-plus" aria-hidden="true"></i>
+            </button>
+          </div>
+          {{#each virtualFolders as |folder|}}
+            <div class="mg-tree-row mg-virtual-row {{#if folder.selected}}is-active{{/if}}"
+              data-virtual-drop="{{folder.id}}">
+              <button type="button" class="mg-tree-folder" data-action="select-virtual-folder"
+                data-virtual-folder="{{folder.id}}" title="{{folder.name}} · Drag media here to group it"
+                {{#if folder.selected}}aria-current="page"{{/if}}>
+                <i class="fas {{#if folder.selected}}fa-folder-open{{else}}fa-folder{{/if}}" aria-hidden="true"></i>
+                <span class="mg-tree-label">{{folder.name}}</span>
+                <span class="mg-tree-count" title="{{folder.count}} media items in the current index">{{folder.count}}</span>
+              </button>
+              <button type="button" class="mg-virtual-edit" data-action="rename-virtual-folder"
+                data-virtual-folder="{{folder.id}}" title="Rename {{folder.name}}" aria-label="Rename {{folder.name}}">
+                <i class="fas fa-pen" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="mg-virtual-edit" data-action="delete-virtual-folder"
+                data-virtual-folder="{{folder.id}}" title="Delete {{folder.name}}" aria-label="Delete {{folder.name}}">
+                <i class="fas fa-trash" aria-hidden="true"></i>
+              </button>
+            </div>
+          {{else}}
+            <p class="mg-virtual-hint">Create a folder, then select or drag images into it.</p>
+          {{/each}}
+        </section>
+
         {{#if availableTags.length}}
           <section class="mg-tag-filter-section" aria-label="Image tags">
             <div class="mg-pinned-heading">
@@ -360,11 +392,21 @@
         </label>
       </div>
 
+      <div class="mg-selection-bar" aria-label="Group media into virtual folders">
+        <button type="button" data-action="select-visible-images" {{#unless hasVisibleFiles}}disabled{{/unless}}>Select shown</button>
+        <span aria-live="polite">{{folderSelectionCount}} selected</span>
+        <button type="button" data-action="move-to-virtual-folder" {{#unless hasFolderSelection}}disabled{{/unless}}>
+          <i class="fas fa-folder-open" aria-hidden="true"></i> Move to folder
+        </button>
+        <button type="button" data-action="clear-image-selection" {{#unless hasFolderSelection}}disabled{{/unless}}>Clear</button>
+      </div>
+
       <div class="mg-gallery-scroll">
         {{#*inline "thumbCard"}}
           <article
-            class="mg-thumb {{#if selected}}is-selected{{/if}}"
+            class="mg-thumb {{#if selected}}is-selected{{/if}} {{#if folderSelected}}is-folder-selected{{/if}}"
             data-path="{{path}}"
+            draggable="true"
             title="{{path}} — Left-click to select; right-click for Scene Details"
             tabindex="0"
             {{#if selected}}aria-current="true"{{/if}}
@@ -388,6 +430,7 @@
                   loading="lazy"
                   decoding="async"
                   fetchpriority="low"
+                  draggable="false"
                 >
               {{/if}}
               {{#if hasScenePreset}}
@@ -412,6 +455,10 @@
                 <i class="{{#if favorite}}fas{{else}}far{{/if}} fa-star" aria-hidden="true"></i>
               </button>
               <div class="mg-hover-actions">
+                <button type="button" class="mg-action" data-action="move-to-virtual-folder"
+                  data-path="{{path}}" title="Move to virtual folder" aria-label="Move {{label}} to virtual folder">
+                  <i class="fas fa-folder-open" aria-hidden="true"></i>
+                </button>
                 <button
                   type="button"
                   class="mg-action"
@@ -435,7 +482,14 @@
                 </button>
               </div>
             </div>
-            <div class="mg-name" title="{{label}}">{{label}}</div>
+            <div class="mg-card-name-row">
+              <button type="button" class="mg-select-image" data-action="toggle-folder-image-selection"
+                data-path="{{path}}" aria-label="Select {{label}} for grouping" title="Select for grouping"
+                aria-pressed="{{#if folderSelected}}true{{else}}false{{/if}}">
+                <i class="{{#if folderSelected}}fas fa-square-check{{else}}far fa-square{{/if}}" aria-hidden="true"></i>
+              </button>
+              <div class="mg-name" title="{{label}}">{{label}}</div>
+            </div>
             {{#if tags.length}}
               <div class="mg-card-tags" aria-label="Tags">
                 {{#each displayTags as |tag|}}<span>#{{tag}}</span>{{/each}}
