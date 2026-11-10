@@ -579,11 +579,17 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   _buildTree(visibleFileObjs, baseDir) {
+    this._getVirtualFolders();
+    const excludedPaths = this._allMediaExcludedPaths;
     const base = this._normalizeBaseDir(baseDir);
     const pinnedSignature = this._getPinnedFolderSignature();
     const cached = this._treeCache;
 
-    if (cached?.fileObjs === visibleFileObjs && cached.base === base) {
+    if (
+      cached?.fileObjs === visibleFileObjs
+      && cached.base === base
+      && cached.excludedPaths === excludedPaths
+    ) {
       this._refreshTreeNodeState(cached.root);
       if (cached.pinnedSignature !== pinnedSignature) {
         this._sortTreeChildren(cached.root);
@@ -650,7 +656,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       let current = root;
 
       for (const part of parts) current = ensureNode(current, part);
-      current.files.push(file);
+      if (!excludedPaths.has(file.path)) current.files.push(file);
     }
 
     this._refreshTreeNodeState(root);
@@ -658,6 +664,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._treeCache = {
       fileObjs: visibleFileObjs,
       base,
+      excludedPaths,
       pinnedSignature,
       root,
       nodeMap
@@ -817,10 +824,10 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       candidates = fileObjs;
     } else {
       candidates = fileObjs.filter((file) => {
-        if (!this._activeFolder || this._activeFolder === rootPath) {
-          return !this._allMediaExcludedPaths.has(file.path);
-        }
-        return file.folder === this._activeFolder;
+        if (this._allMediaExcludedPaths.has(file.path)) return false;
+        return !this._activeFolder
+          || this._activeFolder === rootPath
+          || file.folder === this._activeFolder;
       });
     }
 
@@ -951,7 +958,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     const availablePaths = new Set(fileObjs.map((file) => file.path));
     const favoriteCount = fileObjs.filter((file) => file.favorite).length;
     const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
-    const allMediaCount = fileObjs.filter((file) => !this._allMediaExcludedPaths.has(file.path)).length;
+    const allMediaCount = tree.totalCount;
     const availableTags = this._getAvailableTags(fileObjs);
 
     let activeFolderLabel;

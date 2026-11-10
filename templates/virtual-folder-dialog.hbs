@@ -10,7 +10,7 @@
     <div class="form-fields">
       <input id="mg-virtual-folder-exclude" name="excludeFromAllMedia" type="checkbox" {{#if excludeFromAllMedia}}checked{{/if}}>
     </div>
-    <p class="hint">Hide this folder's media from All Media. It remains available in this virtual folder, source folders, Favorites, and tags.</p>
+    <p class="hint">Hide this folder's media from All Media and its source subfolders. It remains available in this virtual folder, Favorites, Recently Displayed, and tags.</p>
   </div>
   <p class="hint">Virtual folders group media in this world. Files stay in their original data folders.</p>
 {{/if}}
@@ -27,9 +27,9 @@
       </select>
     </div>
   </div>
-  <p class="hint">Each image belongs to one virtual folder. Its folder's settings control whether it appears in All Media. Files remain available in their source folders.</p>
+  <p class="hint">Each image belongs to one virtual folder. Its folder's settings control whether it appears in All Media and its source subfolders. Files stay in their original data folders.</p>
 {{/if}}
 {{#if deleteFolder}}
   <p>Delete the virtual folder <strong>{{name}}</strong>?</p>
-  <p>Its images will remain in All Media and their source folders. No media files will be deleted.</p>
+  <p>Its images will appear in All Media and its source subfolders. No media files will be deleted.</p>
 {{/if}}

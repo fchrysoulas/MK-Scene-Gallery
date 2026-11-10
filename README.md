@@ -74,12 +74,13 @@ Choose **Remove from virtual folders** in the move dialog to ungroup it.
 Virtual folders are saved with the world and shared by its GMs. They show only
 media in the current gallery index, so include subfolders or choose the source
 directory needed to see the images. Enable **Exclude media from All Media** when
-creating or editing a virtual folder to hide its media from All Media, including
-searches in that view. Source folders, Favorites, tags, and the virtual folder
-still show it. Removing an image from the group or deleting the group makes it
-available in All Media again. Uploading while viewing a virtual folder stores files
-in the configured base directory and adds them to that virtual folder. The pen
-and trash buttons edit and delete groups; deleting a group keeps every file.
+creating or editing a virtual folder to hide its media from All Media, its source
+subfolders, and searches in those views. Favorites, Recently Displayed, tags, and
+the virtual folder still show it. Removing an image from the group or deleting
+the group restores it to All Media and its source subfolders. Uploading while
+viewing a virtual folder stores files in the configured base directory and adds
+them to that virtual folder. The pen and trash buttons edit and delete groups;
+deleting a group keeps every file.
 
 ## Migration from Share Media Gallery
 

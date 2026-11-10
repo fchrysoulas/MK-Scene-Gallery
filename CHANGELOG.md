@@ -4,6 +4,11 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.12.2
+
+- Apply virtual-folder exclusions to All Media's source subfolders and their
+  counts, while keeping media accessible through virtual folders and saved filters.
+
 ## 0.12.1
 
 - Use the namespaced FilePicker and UUID APIs supported by Foundry v13-v14.
