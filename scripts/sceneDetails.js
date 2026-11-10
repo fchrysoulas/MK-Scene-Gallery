@@ -345,9 +345,9 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const uuid = typeof data.uuid === "string" ? data.uuid : "";
     let document = null;
 
-    if (uuid && typeof globalThis.fromUuid === "function") {
+    if (uuid) {
       try {
-        document = await globalThis.fromUuid(uuid);
+        document = await foundry.utils.fromUuid(uuid);
       } catch (error) {
         console.warn(`${MODULE_ID} | Could not resolve dropped document`, error);
       }

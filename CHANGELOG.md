@@ -4,6 +4,16 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.12.1
+
+- Use the namespaced FilePicker and UUID APIs supported by Foundry v13-v14.
+- Refresh Scene background controls when v14 Levels are created, updated, or
+  deleted.
+- Capture and apply preset background colors on the viewed v14 Level instead of
+  the legacy Scene field.
+- Added an option when creating or editing a virtual folder to exclude its media
+  from All Media while keeping it accessible in other gallery views.
+
 ## 0.12.0
 
 - Added persistent virtual folders with creation, renaming, deletion, individual

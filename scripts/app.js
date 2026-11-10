@@ -68,7 +68,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       "create-virtual-folder": async function (event) {
         await this._editVirtualFolder(event);
       },
-      "rename-virtual-folder": async function (event, target) {
+      "edit-virtual-folder": async function (event, target) {
         await this._editVirtualFolder(event, target);
       },
       "delete-virtual-folder": async function (event, target) {
@@ -174,6 +174,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._virtualFoldersSource = null;
     this._virtualFolders = [];
     this._virtualFolderPaths = new Map();
+    this._allMediaExcludedPaths = new Set();
     this._folderDragHandler = (event) => this._handleFolderDrag(event);
     const savedPins = game.settings.get(MODULE_ID, "pinnedFolders");
     this._pinnedFolders = new Set(
@@ -779,6 +780,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   _getVisibleFiles(fileObjs, baseDir) {
+    this._getVirtualFolders();
     const configuredPageSize = Number(game.settings.get(MODULE_ID, "pageSize"));
     const normalizedPageSize = Math.floor(configuredPageSize);
     const pageSize = Number.isFinite(normalizedPageSize) && normalizedPageSize > 0
@@ -815,7 +817,9 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       candidates = fileObjs;
     } else {
       candidates = fileObjs.filter((file) => {
-        if (!this._activeFolder || this._activeFolder === rootPath) return true;
+        if (!this._activeFolder || this._activeFolder === rootPath) {
+          return !this._allMediaExcludedPaths.has(file.path);
+        }
         return file.folder === this._activeFolder;
       });
     }
@@ -947,6 +951,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     const availablePaths = new Set(fileObjs.map((file) => file.path));
     const favoriteCount = fileObjs.filter((file) => file.favorite).length;
     const recentCount = this._recentImages.filter((path) => availablePaths.has(path)).length;
+    const allMediaCount = fileObjs.filter((file) => !this._allMediaExcludedPaths.has(file.path)).length;
     const availableTags = this._getAvailableTags(fileObjs);
 
     let activeFolderLabel;
@@ -1020,6 +1025,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       sidebarCollapsed: this._sidebarCollapsed,
       favoriteCount,
       recentCount,
+      allMediaCount,
       favoritesSelected: this._quickFilter === "favorites",
       recentSelected: this._quickFilter === "recent",
       quickFilterActive,
@@ -1248,6 +1254,9 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     const sceneHooks = [
       "canvasReady",
       "updateScene",
+      "createLevel",
+      "updateLevel",
+      "deleteLevel",
       "createTile",
       "updateTile",
       "deleteTile",
@@ -1265,6 +1274,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     }
     const settingHook = Hooks.on("updateSetting", (setting) => {
       if (setting.key !== `${MODULE_ID}.virtualFolders`) return;
+      this.page = 0;
       this._safeRender(false);
     });
     this._sceneHookIds.push(["updateSetting", settingHook]);
@@ -1866,6 +1876,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
 
   async _pickFolder() {
     const current = this._getBaseDir();
+    const FilePicker = foundry.applications.apps.FilePicker.implementation;
 
     const fp = new FilePicker({
       type: "folder",
@@ -1885,7 +1896,9 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   async _uploadOneFile(baseDir, file) {
-    return await FilePicker.upload("data", baseDir, file, {}, { notify: false });
+    return await foundry.applications.apps.FilePicker.implementation.upload(
+      "data", baseDir, file, {}, { notify: false }
+    );
   }
 
   async _refreshGallery() {

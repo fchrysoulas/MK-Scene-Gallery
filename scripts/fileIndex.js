@@ -99,6 +99,7 @@ export async function indexImages({
   const seenFiles = new Set();
   const out = [];
   const queue = [startDir];
+  const FilePicker = foundry.applications.apps.FilePicker.implementation;
 
   let active = 0;
   let finalized = false;

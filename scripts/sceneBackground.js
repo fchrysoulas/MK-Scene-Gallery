@@ -15,7 +15,7 @@ function canEditScene(scene) {
   return scene?.isOwner ?? !!game.user?.isGM;
 }
 
-function getBackgroundDocument(scene) {
+export function getSceneBackgroundDocument(scene) {
   if (Number(game.release?.generation) < 14) return scene;
 
   const activeCanvas = globalThis.canvas;
@@ -26,7 +26,7 @@ function getBackgroundDocument(scene) {
 }
 
 export function getSceneBackground(scene) {
-  const path = getBackgroundDocument(scene)?.background?.src;
+  const path = getSceneBackgroundDocument(scene)?.background?.src;
   return path
     ? {
         path,
@@ -52,7 +52,7 @@ async function performSetSceneBackground(scene, path) {
     return false;
   }
 
-  const backgroundDocument = getBackgroundDocument(scene);
+  const backgroundDocument = getSceneBackgroundDocument(scene);
   if (!backgroundDocument) {
     ui.notifications.error("The selected Scene has no background Level.");
     return false;
@@ -92,7 +92,7 @@ async function performRemoveSceneBackground(scene) {
     return false;
   }
 
-  const backgroundDocument = getBackgroundDocument(scene);
+  const backgroundDocument = getSceneBackgroundDocument(scene);
   if (!backgroundDocument) {
     ui.notifications.error("The selected Scene has no background Level.");
     return false;

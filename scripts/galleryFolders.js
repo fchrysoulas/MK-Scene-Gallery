@@ -16,7 +16,7 @@ export function normalizeVirtualFolders(value) {
       assignedPaths.add(path);
       return true;
     });
-    return [{ id: folder.id, name, images }];
+    return [{ id: folder.id, name, images, excludeFromAllMedia: folder.excludeFromAllMedia === true }];
   });
 }
 
@@ -41,6 +41,9 @@ export const GalleryFoldersMixin = (Base) => class extends Base {
       this._virtualFolders = normalizeVirtualFolders(saved);
       this._virtualFolderPaths = new Map(
         this._virtualFolders.map((folder) => [folder.id, new Set(folder.images)])
+      );
+      this._allMediaExcludedPaths = new Set(
+        this._virtualFolders.filter((folder) => folder.excludeFromAllMedia).flatMap((folder) => folder.images)
       );
       this._filterRevision += 1;
     }
@@ -91,13 +94,17 @@ export const GalleryFoldersMixin = (Base) => class extends Base {
     const folder = this._getVirtualFolders().find((entry) => entry.id === id);
     if (id && !folder) return;
     try {
-      const name = await this._folderDialog(
-        folder ? "Rename virtual folder" : "Create virtual folder",
-        { editName: true, name: folder?.name ?? "" },
-        folder ? "Rename" : "Create",
-        (_event, button) => button.form.elements.folderName.value.trim()
+      const result = await this._folderDialog(
+        folder ? "Edit virtual folder" : "Create virtual folder",
+        { editFolder: true, name: folder?.name ?? "", excludeFromAllMedia: folder?.excludeFromAllMedia },
+        folder ? "Save" : "Create",
+        (_event, button) => ({
+          name: button.form.elements.folderName.value.trim(),
+          excludeFromAllMedia: button.form.elements.excludeFromAllMedia.checked
+        })
       );
-      if (typeof name !== "string") return;
+      if (!result) return;
+      const { name, excludeFromAllMedia } = result;
       if (!name) {
         ui.notifications.warn("Enter a folder name.");
         return;
@@ -113,12 +120,13 @@ export const GalleryFoldersMixin = (Base) => class extends Base {
       }
       const nextId = id || foundry.utils.randomID();
       const next = id
-        ? folders.map((entry) => entry.id === id ? { ...entry, name } : entry)
-        : [...folders, { id: nextId, name, images: [] }];
+        ? folders.map((entry) => entry.id === id ? { ...entry, name, excludeFromAllMedia } : entry)
+        : [...folders, { id: nextId, name, images: [], excludeFromAllMedia }];
       await game.settings.set(MODULE_ID, "virtualFolders", next);
+      this.page = 0;
       if (!id) this._selectVirtualFolder(null, { dataset: { virtualFolder: nextId } });
       else this._safeRender(false);
-      ui.notifications.info(`Virtual folder ${folder ? "renamed" : "created"}: ${name}`);
+      ui.notifications.info(`Virtual folder ${folder ? "updated" : "created"}: ${name}`);
     } catch (error) {
       console.error(`${MODULE_ID} | Could not save virtual folder`, error);
       ui.notifications.error("Could not save the virtual folder.");

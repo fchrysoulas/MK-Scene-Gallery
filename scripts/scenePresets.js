@@ -1,4 +1,5 @@
 import { scaleAmbientLightRadiiForGrid } from "./lighting.js";
+import { getSceneBackgroundDocument } from "./sceneBackground.js";
 
 export const KEEP_CURRENT = "__keep__";
 
@@ -385,6 +386,10 @@ export function readScenePresetForm(
 
 export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
   const isV14 = Number(game.release?.generation) >= 14;
+  const levelColor = isV14 ? getSceneBackgroundDocument(scene)?.background?.color : null;
+  const backgroundColor = isV14
+    ? levelColor == null ? null : `#${Number(levelColor).toString(16).padStart(6, "0")}`
+    : scene?.backgroundColor;
   const initial = scene?.initial ?? {};
   const activeCanvas = globalThis.canvas;
   const currentView = activeCanvas?.scene?.id === scene?.id
@@ -402,7 +407,7 @@ export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
     gridAlpha: scene?.grid?.alpha,
     gridDistance: scene?.grid?.distance,
     gridUnits: scene?.grid?.units,
-    backgroundColor: scene?.backgroundColor,
+    backgroundColor,
     darkness: scene?.environment?.darknessLevel,
     tokenVision: scene?.tokenVision,
     fogExploration: isV14
@@ -439,6 +444,12 @@ async function replaceSceneLightSources(scene, lightSources) {
 
 export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } = {}) {
   const preset = normalizeScenePreset(rawPreset, { gridSizeMax });
+  const isV14 = Number(game.release?.generation) >= 14;
+  const levelColorChanged = isV14 && preset.backgroundColor !== null;
+  const backgroundDocument = levelColorChanged ? getSceneBackgroundDocument(scene) : null;
+  if (levelColorChanged && !backgroundDocument) {
+    throw new Error("The selected Scene has no background Level.");
+  }
   const update = {};
   const assign = (path, value) => {
     if (value !== null) update[path] = value;
@@ -450,7 +461,7 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
   assign("grid.alpha", preset.gridAlpha);
   assign("grid.distance", preset.gridDistance);
   assign("grid.units", preset.gridUnits);
-  assign("backgroundColor", preset.backgroundColor);
+  if (!isV14) assign("backgroundColor", preset.backgroundColor);
   assign("tokenVision", preset.tokenVision);
   assign("weather", preset.weather);
   assign("padding", preset.padding);
@@ -460,7 +471,7 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
 
   assign("environment.darknessLevel", preset.darkness);
   assign(
-    Number(game.release?.generation) >= 14 ? "fog.mode" : "fog.exploration",
+    isV14 ? "fog.mode" : "fog.exploration",
     preset.fogExploration
   );
   if (preset.journal !== null) update.journal = preset.journal || null;
@@ -468,7 +479,7 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
   if (preset.playlistSound !== null) update.playlistSound = preset.playlistSound || null;
 
   const lightSourcesChanged = Array.isArray(preset.lightSources);
-  const sceneChanged = Object.keys(update).length > 0 || lightSourcesChanged;
+  const sceneChanged = Object.keys(update).length > 0 || lightSourcesChanged || levelColorChanged;
   if (!sceneChanged) return { changed: false, gridChanged: false, preset };
 
   const previousGridSize = Number(scene?.grid?.size);
@@ -478,6 +489,11 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
     && preset.gridSize !== previousGridSize;
 
   if (Object.keys(update).length > 0) await scene.update(update);
+  if (levelColorChanged) {
+    await backgroundDocument.update({
+      "background.color": Number.parseInt(preset.backgroundColor.slice(1), 16)
+    });
+  }
   if (lightSourcesChanged) await replaceSceneLightSources(scene, preset.lightSources);
   if (gridChanged && !lightSourcesChanged) {
     await scaleAmbientLightRadiiForGrid(scene, previousGridSize, preset.gridSize);
