@@ -1,0 +1,30 @@
+{{#if editName}}
+  <div class="form-group">
+    <label for="mg-scene-map-name">Map name</label>
+    <div class="form-fields"><input id="mg-scene-map-name" name="mapName" type="text" value="{{name}}" maxlength="100" required autofocus></div>
+  </div>
+  <p class="hint">Each map saves its own images, connections, layout, and group location with this world.</p>
+{{/if}}
+{{#if chooseMap}}
+  <p>Add {{count}} selected media item(s) to:</p>
+  <div class="form-group">
+    <label for="mg-scene-map-destination">Scene Map</label>
+    <div class="form-fields"><select id="mg-scene-map-destination" name="mapId" autofocus>
+      {{#each maps}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}
+    </select></div>
+  </div>
+  <p class="hint">An image can belong to multiple Scene Maps. Its source file stays in place.</p>
+{{/if}}
+{{#if deleteMap}}
+  <p>Delete Scene Map <strong>{{name}}</strong>, including its layout, connections, and group marker?</p>
+  <p>Media files and Foundry Scenes are kept.</p>
+{{/if}}
+{{#if addScene}}
+  <div class="form-group">
+    <label for="mg-scene-map-scene">Foundry Scene</label>
+    <div class="form-fields"><select id="mg-scene-map-scene" name="sceneId" autofocus>
+      {{#each scenes}}<option value="{{id}}">{{name}}</option>{{/each}}
+    </select></div>
+  </div>
+  <p class="hint">Clicking this node activates its Foundry Scene for the group. You can also drag Scenes from the sidebar onto the map.</p>
+{{/if}}

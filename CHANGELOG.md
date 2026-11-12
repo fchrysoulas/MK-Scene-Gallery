@@ -4,6 +4,18 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.13.0
+
+- Added multiple Scene Maps with draggable image and Foundry Scene nodes,
+  connections, group-location markers, and pan, zoom, and fit controls.
+- Added individual and batch gallery actions, drag-and-drop support, and a
+  macro API for opening Scene Maps.
+- Clicking a node or its Group here button activates its linked Foundry Scene
+  or applies its image and saved preset to the active Scene, then moves the group
+  marker after success.
+- Scene Map images retain their saved presets and linked content when the
+  gallery switches to a different folder.
+
 ## 0.12.2
 
 - Apply virtual-folder exclusions to All Media's source subfolders and their

@@ -30,6 +30,8 @@ User Data folders and setting them as Scene backgrounds.
 - Upload files and edit image names, descriptions, and custom tags.
 - Create world-wide virtual folders and move images into them individually,
   in batches, or by dragging thumbnails onto a folder. Files stay in place.
+- Create multiple Scene Maps with draggable image and Foundry Scene nodes,
+  connections, and a separate group-location marker on each map.
 - Set an image or video as the active Scene background, remove it from the
   gallery toolbar, and fade background changes made by Foundry or other modules.
 - Save per-image Scene presets for grid, vision, fog, weather, lighting,
@@ -81,6 +83,38 @@ the group restores it to All Media and its source subfolders. Uploading while
 viewing a virtual folder stores files in the configured base directory and adds
 them to that virtual folder. The pen and trash buttons edit and delete groups;
 deleting a group keeps every file.
+
+### Scene Maps
+
+Open **Scene Maps** in the gallery toolbar and click **New map**. Name maps for
+different adventures, chapters, dungeons, or regions, then switch between them
+with the map dropdown. Rename, duplicate, and delete maps beside the dropdown.
+Layouts, links, and group locations are saved with the world and shared by GMs.
+
+Use a gallery image's **Add to Scene Map** button, or select several images and
+use **Add to Scene Map** in the selection bar. With multiple maps, choose the
+destination in the dialog. You can also drag gallery images onto the map; adding
+them keeps their files and virtual-folder assignments in place. Images can
+appear in more than one map and remain usable after changing gallery folders.
+
+Drag node titles to arrange them. Click **Link images**, then click two images
+to connect them; repeat the same pair to remove a connection. Click **Done
+linking** or press Escape to return to traveling. Drag empty canvas space to pan,
+scroll to zoom, and use **Fit** to see the layout.
+
+Click an image or its **Group here** button to apply its background and saved
+Scene preset to the world's **active Scene**, and move this map's group marker
+after success. The marker records one group location per map; links show
+possible routes and do not restrict travel.
+
+Use **Add Scene** or drag a Scene from Foundry's sidebar to link an existing
+world Scene. Clicking that node or its **Group here** button activates its Scene
+for the players and opens it for the GM. The remove button only removes a node
+and its connections from the map. Deleting a map keeps all media files and
+Foundry Scenes.
+
+Macros can open the map window with
+`game.modules.get("mk-scene-gallery").api.openSceneMap()`.
 
 ## Migration from Share Media Gallery
 

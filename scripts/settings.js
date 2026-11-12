@@ -23,6 +23,23 @@ const DEFAULTS = {
 };
 
 export function registerSettings() {
+  game.settings.register(MODULE_ID, "sceneMaps", {
+    name: "Scene Maps",
+    hint: "Named layouts, connections, and group locations shared by the world's GMs.",
+    scope: "world",
+    config: false,
+    type: Array,
+    default: []
+  });
+
+  game.settings.register(MODULE_ID, "lastSceneMap", {
+    name: "Last Scene Map",
+    scope: "client",
+    config: false,
+    type: String,
+    default: ""
+  });
+
   game.settings.register(MODULE_ID, "baseDir", {
     name: "Base directory",
     hint: "Folder to scan for images (relative to your data source).",

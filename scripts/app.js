@@ -65,6 +65,15 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       minimizable: true
     },
     actions: {
+      "open-scene-map": async function () {
+        await this._openSceneMap();
+      },
+      "add-to-scene-map": async function (event, target) {
+        event.preventDefault();
+        event.stopPropagation();
+        const paths = target?.dataset?.path ? [target.dataset.path] : [...this._folderSelection];
+        await this._openSceneMap(paths);
+      },
       "create-virtual-folder": async function (event) {
         await this._editVirtualFolder(event);
       },
@@ -1824,21 +1833,44 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     event.stopPropagation();
 
     const path = target?.dataset?.path;
+    return this._displayImage(path);
+  }
+
+  async _openSceneMap(paths = []) {
+    try {
+      const { openSceneMap } = await import("./sceneMap.js");
+      await openSceneMap({ gallery: this, paths });
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not open Scene Map`, error);
+      ui.notifications.error("Could not open Scene Map.");
+    }
+  }
+
+  async _displayImage(path, scene = this._getSelectedScene()) {
     if (!path) {
       ui.notifications.warn("No image path found.");
-      return;
+      return false;
     }
 
-    const image = this._getFileObjects().find((candidate) => candidate.path === path);
-    const scene = this._getSelectedScene();
+    // Maps keep working even after the gallery switches to another source folder.
+    const metadata = game.settings.get(MODULE_ID, "imageMetadata")?.[path];
+    const image = this._getFileObjects().find((candidate) => candidate.path === path) ?? {
+      path,
+      scenePreset: normalizeScenePreset({
+        ...metadata?.scenePreset,
+        gridSize: metadata?.scenePreset?.gridSize ?? metadata?.gridSize
+      }, {
+        gridSizeMax: this._getGridSizeMax()
+      })
+    };
     if (image && hasScenePresetValues(image.scenePreset)) {
       if (!scene) {
         ui.notifications.warn("Open a scene before setting its background.");
-        return;
+        return false;
       }
       if (!(scene.isOwner ?? !!game.user?.isGM)) {
         ui.notifications.error(`You cannot edit ${scene.name || "the selected Scene"}.`);
-        return;
+        return false;
       }
 
       try {
@@ -1848,25 +1880,26 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       } catch (error) {
         console.error(`${MODULE_ID} | Could not apply image Scene preset`, error);
         ui.notifications.error("Could not apply the image Scene preset.");
-        return;
+        return false;
       }
     }
 
     const displayed = await setSceneBackground(scene, path);
-    if (!displayed) return;
+    if (!displayed) return false;
 
     await this._recordRecentlyDisplayed(path);
-    if (!image?.scenePreset) return;
+    if (!image?.scenePreset) return true;
     await this._runLinkedContentActions(image);
 
     const activeCanvas = globalThis.canvas;
-    if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return;
+    if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return true;
 
     const view = {};
     if (image.scenePreset.initialX !== null) view.x = image.scenePreset.initialX;
     if (image.scenePreset.initialY !== null) view.y = image.scenePreset.initialY;
     if (image.scenePreset.initialScale !== null) view.scale = image.scenePreset.initialScale;
     if (Object.keys(view).length) await activeCanvas.animatePan(view);
+    return true;
   }
 
   async _removeSceneBackground(event, target = event.currentTarget) {

@@ -213,7 +213,7 @@ export const GalleryFoldersMixin = (Base) => class extends Base {
       if (!path || !event.dataTransfer) return;
       const paths = this._folderSelection.has(path) ? Array.from(this._folderSelection) : [path];
       event.dataTransfer.setData(DRAG_TYPE, JSON.stringify(paths));
-      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.effectAllowed = "copyMove";
       return;
     }
     if (event.type === "dragend") {

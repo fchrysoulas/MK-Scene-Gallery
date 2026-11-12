@@ -1,0 +1,77 @@
+<div class="mg-map-wrap">
+  <header class="mg-map-toolbar">
+    <label class="mg-map-picker">
+      <i class="fas fa-diagram-project" aria-hidden="true"></i>
+      <span class="sr-only">Scene Map</span>
+      <select data-role="map-select" aria-label="Scene Map" {{#unless hasMap}}disabled{{/unless}}>
+        {{#each maps}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{else}}
+          <option>No Scene Maps yet</option>
+        {{/each}}
+      </select>
+    </label>
+    <button type="button" data-action="new-map" title="Create Scene Map"><i class="fas fa-plus" aria-hidden="true"></i> New map</button>
+    <button type="button" data-action="rename-map" title="Rename Scene Map" aria-label="Rename Scene Map" {{#unless hasMap}}disabled{{/unless}}><i class="fas fa-pen" aria-hidden="true"></i></button>
+    <button type="button" data-action="duplicate-map" title="Duplicate Scene Map" aria-label="Duplicate Scene Map" {{#unless hasMap}}disabled{{/unless}}><i class="fas fa-copy" aria-hidden="true"></i></button>
+    <button type="button" data-action="delete-map" class="mg-map-danger" title="Delete Scene Map" aria-label="Delete Scene Map" {{#unless hasMap}}disabled{{/unless}}><i class="fas fa-trash" aria-hidden="true"></i></button>
+    <span class="mg-map-toolbar-spacer"></span>
+    <button type="button" data-action="open-gallery"><i class="fas fa-images" aria-hidden="true"></i> Gallery</button>
+    <button type="button" data-action="add-scene" {{#unless hasMap}}disabled{{/unless}}><i class="fas fa-map" aria-hidden="true"></i> Add Scene</button>
+  </header>
+  <div class="mg-map-tools">
+    <button type="button" data-action="link-mode" class="{{#if linkMode}}is-active{{/if}}" aria-pressed="{{#if linkMode}}true{{else}}false{{/if}}" {{#unless hasNodes}}disabled{{/unless}}>
+      <i class="fas {{#if linkMode}}fa-check{{else}}fa-link{{/if}}" aria-hidden="true"></i> {{#if linkMode}}Done linking{{else}}Link images{{/if}}
+    </button>
+    <p class="mg-map-instruction" aria-live="polite">{{instruction}}</p>
+    <button type="button" data-action="zoom-out" title="Zoom out" aria-label="Zoom out"><i class="fas fa-minus" aria-hidden="true"></i></button>
+    <output data-role="map-zoom" aria-label="Map zoom">100%</output>
+    <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus" aria-hidden="true"></i></button>
+    <button type="button" data-action="fit-map" title="Fit map in window"><i class="fas fa-expand" aria-hidden="true"></i> Fit</button>
+  </div>
+  <section class="mg-map-viewport {{#if linkMode}}is-linking{{/if}}" aria-label="Scene Map canvas" tabindex="0">
+    <div class="mg-map-world">
+      <svg class="mg-map-links" width="1" height="1" aria-hidden="true">
+        {{#each links}}
+          <line x1="{{x1}}" y1="{{y1}}" x2="{{x2}}" y2="{{y2}}" class="{{#if traveled}}is-traveled{{/if}}" />
+        {{/each}}
+      </svg>
+      {{#each nodes}}
+        <article class="mg-map-node {{#if party}}has-group{{/if}} {{#if linkSource}}is-link-source{{/if}} {{#if missing}}is-missing{{/if}}"
+          data-node-id="{{id}}" style="left: {{x}}px; top: {{y}}px;" aria-label="{{label}}">
+          {{#if party}}<span class="mg-map-party"><i class="fas fa-people-group" aria-hidden="true"></i> Group here</span>{{/if}}
+          <div class="mg-map-node-handle" data-role="node-handle" title="Drag to arrange {{label}}">
+            <i class="fas {{#if isScene}}fa-map{{else}}fa-image{{/if}}" aria-hidden="true"></i>
+            <span>{{label}}</span><i class="fas fa-grip-vertical" aria-hidden="true"></i>
+          </div>
+          <button type="button" class="mg-map-image" data-action="visit-node" data-node-id="{{id}}"
+            title="{{#if @root.linkMode}}Choose {{label}} to link{{else}}{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the active Scene{{/if}}{{/if}}"
+            aria-label="{{#if @root.linkMode}}Link {{label}}{{else}}Travel to {{label}}{{/if}}">
+            {{#if url}}
+              {{#if isVideo}}<video src="{{url}}" muted playsinline preload="metadata" aria-label="{{label}}"></video>
+              {{else}}<img src="{{url}}" alt="{{label}}" draggable="false" loading="lazy">{{/if}}
+            {{else}}<i class="fas fa-map" aria-hidden="true"></i>{{/if}}
+            {{#if missing}}<span class="mg-map-missing">Scene removed</span>{{/if}}
+          </button>
+          <footer>
+            <button type="button" data-action="group-here" data-node-id="{{id}}" title="{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the active Scene{{/if}} and move the group here" aria-label="Move group to {{label}}">
+              <i class="fas fa-people-group" aria-hidden="true"></i> Group here
+            </button>
+            <button type="button" data-action="remove-node" data-node-id="{{id}}" class="mg-map-danger" title="Remove from map" aria-label="Remove {{label}} from map"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+          </footer>
+        </article>
+      {{/each}}
+    </div>
+    {{#unless hasNodes}}
+      <div class="mg-map-empty">
+        <i class="fas fa-diagram-project" aria-hidden="true"></i>
+        <h2>{{#if hasMap}}{{mapName}}{{else}}Connect your adventure{{/if}}</h2>
+        <p>{{#if hasMap}}Add images from the gallery or drag in Foundry Scenes. Arrange them and link the places your group can travel.{{else}}Create a Scene Map for a dungeon, journey, or chapter. Each map keeps its own connections and group location.{{/if}}</p>
+        <button type="button" data-action="{{#if hasMap}}open-gallery{{else}}new-map{{/if}}"><i class="fas fa-plus" aria-hidden="true"></i> {{#if hasMap}}Add gallery images{{else}}Create Scene Map{{/if}}</button>
+      </div>
+    {{/unless}}
+  </section>
+  <footer class="mg-map-status">
+    <span><i class="fas fa-people-group" aria-hidden="true"></i> Group: <strong>{{partyLabel}}</strong></span>
+    <span>{{nodeCount}} places &middot; {{linkCount}} connections</span>
+    <span title="Image nodes change this Scene's background. Foundry Scene nodes activate their linked Scene.">Active Scene: <strong>{{activeScene}}</strong></span>
+  </footer>
+</div>

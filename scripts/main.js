@@ -14,8 +14,24 @@ function openGallery() {
   return new MediaGalleryApp().render({ force: true });
 }
 
+async function openSceneMaps() {
+  if (!game.user?.isGM) {
+    ui.notifications?.warn?.("Only Game Masters can open Scene Maps.");
+    return null;
+  }
+  try {
+    const { openSceneMap } = await import("./sceneMap.js");
+    return await openSceneMap({ gallery: new MediaGalleryApp() });
+  } catch (error) {
+    console.error(`${MODULE_ID} | Could not open Scene Maps`, error);
+    ui.notifications?.error?.("Could not open Scene Maps.");
+    return null;
+  }
+}
+
 const API = Object.freeze({
-  open: openGallery
+  open: openGallery,
+  openSceneMap: openSceneMaps
 });
 
 function registerModuleHubIntegration(hub) {
