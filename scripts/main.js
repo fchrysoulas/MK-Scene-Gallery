@@ -2,6 +2,7 @@ import { MODULE_ID, migrateLegacySettings, registerSettings } from "./settings.j
 import { registerHbsHelpers } from "./hbsHelpers.js";
 import { MediaGalleryApp } from "./app.js";
 import { registerBackgroundTransitionHooks } from "./backgroundTransitions.js";
+import { renderSceneMapToolbar } from "./sceneMapToolbar.js";
 
 const HUB_METADATA_FLAG = "mk-module-hub";
 
@@ -14,14 +15,14 @@ function openGallery() {
   return new MediaGalleryApp().render({ force: true });
 }
 
-async function openSceneMaps() {
+async function openSceneMaps({ mapId } = {}) {
   if (!game.user?.isGM) {
     ui.notifications?.warn?.("Only Game Masters can open Scene Maps.");
     return null;
   }
   try {
     const { openSceneMap } = await import("./sceneMap.js");
-    return await openSceneMap({ gallery: new MediaGalleryApp() });
+    return await openSceneMap({ gallery: new MediaGalleryApp(), mapId });
   } catch (error) {
     console.error(`${MODULE_ID} | Could not open Scene Maps`, error);
     ui.notifications?.error?.("Could not open Scene Maps.");
@@ -82,4 +83,10 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
   registerBackgroundTransitionHooks();
   await migrateLegacySettings();
+  try {
+    await renderSceneMapToolbar();
+  } catch (error) {
+    console.error(`${MODULE_ID} | Could not render Scene Map toolbar`, error);
+    ui.notifications.error("Could not show the Scene Map toolbar.");
+  }
 });

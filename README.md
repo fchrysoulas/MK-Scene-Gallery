@@ -86,6 +86,14 @@ deleting a group keeps every file.
 
 ### Scene Maps
 
+GMs have an always-on-top toolbar near the top of the screen, even while the
+gallery and Scene Maps are closed. Select a map and click **Open**, or use
+**Gallery** to browse scene images. **MK Actors** opens the Actor gallery when
+that module is enabled. With no maps yet, **Open** lets you create the first one.
+Drag the grip at the left edge to move the toolbar. Its position is saved on
+this client and kept within the screen. You can also focus the grip and use
+arrow keys to move it, holding Shift for larger steps.
+
 Open **Scene Maps** in the gallery toolbar and click **New map**. Name maps for
 different adventures, chapters, dungeons, or regions, then switch between them
 with the map dropdown. Rename, duplicate, and delete maps beside the dropdown.
@@ -103,7 +111,7 @@ linking** or press Escape to return to traveling. Drag empty canvas space to pan
 scroll to zoom, and use **Fit** to see the layout.
 
 Click an image or its **Group here** button to apply its background and saved
-Scene preset to the world's **active Scene**, and move this map's group marker
+Scene preset to the **selected/viewed Scene**, and move this map's group marker
 after success. The marker records one group location per map; links show
 possible routes and do not restrict travel.
 
@@ -113,8 +121,23 @@ for the players and opens it for the GM. The remove button only removes a node
 and its connections from the map. Deleting a map keeps all media files and
 Foundry Scenes.
 
+Drop Actors from the sidebar or a compendium onto a place to attach characters.
+Click its character-count button to inspect attachments or detach them. You can
+also select tokens on the Foundry canvas and click **Attach selected canvas
+tokens** in the Characters panel to save their appearance, state, and position.
+Repeated Actor drops add multiple copies, useful for groups of the same NPC.
+
+Loading a place through its image or **Group here** places its attached tokens.
+New Actors appear near the Scene center; attached canvas tokens keep their saved
+positions. Revisiting does not duplicate tokens already present. When another
+place uses the same Foundry Scene, Scene Map tokens are swapped and their latest
+positions and state are remembered. Other Scene tokens stay in place. Detaching
+a character takes effect when you next load that place. Compendium Actors are
+imported into the world when first needed.
+
 Macros can open the map window with
 `game.modules.get("mk-scene-gallery").api.openSceneMap()`.
+Pass `{ mapId: "your-map-id" }` to open a specific map.
 
 ## Migration from Share Media Gallery
 

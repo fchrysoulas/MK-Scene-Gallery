@@ -40,6 +40,14 @@ export function registerSettings() {
     default: ""
   });
 
+  game.settings.register(MODULE_ID, "sceneMapToolbarPosition", {
+    name: "Scene Map toolbar position",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {}
+  });
+
   game.settings.register(MODULE_ID, "baseDir", {
     name: "Base directory",
     hint: "Folder to scan for images (relative to your data source).",

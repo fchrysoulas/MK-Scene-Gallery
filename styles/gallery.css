@@ -2861,6 +2861,68 @@
   }
 }
 
+/* Persistent Scene Map toolbar, above ordinary Foundry application windows. */
+#mk-scene-gallery-toolbar {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100000 !important;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  height: auto;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid rgba(221, 168, 91, 0.42);
+  border-radius: 10px;
+  background: rgba(12, 16, 25, 0.94);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+  color: #f4f1eb;
+  color-scheme: dark;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  font-size: 12px;
+}
+
+.mg-floating-toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.mg-floating-map-picker { display: flex; align-items: center; gap: 8px; min-width: 0; color: #dda85b; }
+#mk-scene-gallery-toolbar select {
+  width: 200px;
+  max-width: 35vw;
+  min-width: 100px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: #171e2a;
+  color: #f4f1eb;
+  font-size: 12px;
+}
+#mk-scene-gallery-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: #1b212f;
+  color: #f4f1eb;
+  font-size: 12px;
+  cursor: pointer;
+}
+#mk-scene-gallery-toolbar button:hover { border-color: #dda85b; background: #362b1d; color: #f1c171; }
+#mk-scene-gallery-toolbar button:focus-visible,
+#mk-scene-gallery-toolbar select:focus-visible { outline: 2px solid #dda85b; outline-offset: 2px; }
+.mg-floating-toolbar-divider { height: 22px; border-left: 1px solid rgba(255, 255, 255, 0.15); }
+
+#mk-scene-gallery-toolbar .mg-floating-toolbar-handle { padding-inline: 6px; cursor: grab; touch-action: none; user-select: none; }
+#mk-scene-gallery-toolbar.is-dragging,
+#mk-scene-gallery-toolbar.is-dragging * { cursor: grabbing; user-select: none; }
+
 /* Scene Maps */
 #mk-scene-gallery-scene-map { min-width: 660px; min-height: 440px; }
 
@@ -2940,6 +3002,25 @@
 .mg-map-tools { gap: 6px; padding-block: 8px; }
 .mg-map-instruction { flex: 1; min-width: 0; margin: 0 6px; color: var(--mg-muted); font-size: 11px; }
 .mg-map-tools output { min-width: 40px; text-align: center; color: var(--mg-muted); }
+
+.mg-map-body { display: flex; flex: 1; min-height: 0; }
+.mg-map-characters {
+  flex: 0 0 250px;
+  min-width: 0;
+  padding: 12px;
+  overflow-y: auto;
+  border-left: 1px solid var(--mg-border);
+  background: var(--mg-bg);
+}
+.mg-map-characters header { display: flex; align-items: center; gap: 8px; }
+.mg-map-characters h3 { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 14px; color: var(--mg-text); }
+.mg-map-characters p { margin: 10px 0; font-size: 11px; line-height: 1.5; color: var(--mg-muted); }
+.mg-map-wrap .mg-map-characters > button { width: 100%; white-space: normal; }
+.mg-map-character-list { list-style: none; padding: 0; margin: 12px 0; }
+.mg-map-character-list li { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--mg-border); }
+.mg-map-character-list img { width: 32px; height: 32px; object-fit: contain; border: 0; }
+.mg-map-character-list span { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+.mg-map-character-list .mg-map-no-characters { color: var(--mg-muted); font-size: 12px; }
 
 .mg-map-viewport {
   position: relative;

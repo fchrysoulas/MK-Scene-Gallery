@@ -2,6 +2,12 @@ import { MODULE_ID } from "./settings.js";
 import { getMediaType } from "./fileIndex.js";
 import { getSceneBackground } from "./sceneBackground.js";
 import { normalizeSceneMaps, removeSceneMapNode, toggleSceneMapLink } from "./sceneMapData.js";
+import {
+  cleanSceneMapToken,
+  getSceneMapTokenSource,
+  loadSceneMapTokens,
+  makeSceneMapAttachment
+} from "./sceneMapTokens.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 const NODE_WIDTH = 180;
@@ -22,13 +28,18 @@ function action(method) {
   };
 }
 
-export async function openSceneMap({ gallery, paths = [] } = {}) {
+export async function openSceneMap({ gallery, paths = [], mapId } = {}) {
   if (!game.user?.isGM) {
     ui.notifications.warn("Only Game Masters can open Scene Maps.");
     return null;
   }
+  if (mapId && !normalizeSceneMaps(game.settings.get(MODULE_ID, "sceneMaps")).some((map) => map.id === mapId)) {
+    ui.notifications.warn("This Scene Map no longer exists. Choose another map.");
+    return null;
+  }
   if (!sceneMapApp) sceneMapApp = new SceneMapApp({ gallery });
   if (gallery) sceneMapApp.gallery = gallery;
+  if (mapId) await sceneMapApp._selectMap(mapId);
   await sceneMapApp.render({ force: true });
   if (sceneMapApp.minimized) await sceneMapApp.maximize();
   sceneMapApp.bringToFront();
@@ -55,6 +66,10 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "zoom-out": action("_zoomOut"),
       "visit-node": action("_visitNode"),
       "group-here": action("_groupHere"),
+      "node-characters": action("_showCharacters"),
+      "close-characters": action("_hideCharacters"),
+      "attach-selected-tokens": action("_attachSelectedTokens"),
+      "remove-character": action("_removeCharacter"),
       "remove-node": action("_removeNode")
     }
   };
@@ -72,6 +87,7 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._linkMode = false;
     this._linkFrom = "";
     this._travelPending = false;
+    this._tokenNodeId = "";
     const refresh = () => {
       if (this.rendered && !this._drag && !this._saving) this.render({ force: false });
     };
@@ -131,6 +147,7 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
   async _selectMap(id) {
     this.mapId = id;
     this._linkFrom = "";
+    this._tokenNodeId = "";
     try {
       await game.settings.set(MODULE_ID, "lastSceneMap", id);
     } catch (error) {
@@ -296,6 +313,7 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       url: path ? this.gallery?._toServedUrl(path) ?? path : "",
       isVideo: getMediaType(path) === "video",
       party: node.id === map.partyNodeId,
+      tokenCount: node.tokens.length,
       linkSource: this._linkFrom === node.id
     };
   }
@@ -308,16 +326,18 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (!map?.nodes.some((node) => node.id === this._linkFrom)) this._linkFrom = "";
     const nodes = map?.nodes.map((node) => this._nodeData(node, map)) ?? [];
     const byId = new Map(nodes.map((node) => [node.id, node]));
+    const characterNode = byId.get(this._tokenNodeId);
     return {
       ...context, hasMap: !!map, hasNodes: !!nodes.length,
       maps: maps.map((entry) => ({ id: entry.id, name: entry.name, selected: entry.id === this.mapId })),
       mapName: map?.name, nodes, nodeCount: nodes.length, linkCount: map?.links.length ?? 0,
       partyLabel: byId.get(map?.partyNodeId)?.label ?? "Not placed",
-      activeScene: game.scenes?.active?.name ?? "No active Scene",
+      selectedScene: this.gallery?._getSelectedScene()?.name ?? "No selected Scene",
+      characterNode,
       linkMode: this._linkMode,
       instruction: this._linkMode
         ? (this._linkFrom ? "Choose another image to add or remove its link. Escape cancels." : "Click two images to add or remove a connection.")
-        : "Click an image or Group here to travel. Drag its title to arrange. Drag empty space to pan; scroll to zoom.",
+        : "Click an image to travel. Drop Actors onto a place to attach characters. Drag titles to arrange; empty space to pan; scroll to zoom.",
       links: (map?.links ?? []).map((link) => {
         const from = byId.get(link.from);
         const to = byId.get(link.to);
@@ -356,6 +376,8 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async _groupHere(target) {
     if (this._suppressClick || this._travelPending) return;
+    await this._saveQueue;
+    if (this._travelPending) return;
     const map = this._map();
     const id = target.dataset.nodeId;
     const node = map?.nodes.find((entry) => entry.id === id);
@@ -363,22 +385,29 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._travelPending = true;
     this.element?.classList.add("is-traveling");
     try {
+      let scene;
       if (node.sceneId) {
-        const scene = game.scenes.get(node.sceneId);
+        scene = game.scenes.get(node.sceneId);
         if (!scene) {
           ui.notifications.warn("This Foundry Scene no longer exists. Remove it from the map and add another.");
           return;
         }
+        if (!await this._captureTokens(scene)) return;
+        await loadSceneMapTokens(scene, map.id, node);
         await scene.activate();
         await scene.view();
       } else {
-        const activeScene = game.scenes?.active;
-        if (!activeScene) {
-          ui.notifications.warn("Activate a Foundry Scene before displaying a map image.");
+        scene = this.gallery?._getSelectedScene();
+        if (!scene) {
+          ui.notifications.warn("Open a Foundry Scene before displaying a map image.");
           return;
         }
-        const displayed = await this.gallery?._displayImage(node.path, activeScene);
+        if (!await this._captureTokens(scene)) return;
+        const displayed = await this.gallery?._displayImage(node.path, scene);
         if (!displayed) return;
+        const latestNode = this._maps().find((entry) => entry.id === map.id)?.nodes.find((entry) => entry.id === id);
+        if (!latestNode) return;
+        await loadSceneMapTokens(scene, map.id, latestNode);
       }
       const saved = await this._editMap(map.id, (entry) => {
         if (entry.nodes.some((candidate) => candidate.id === id)) entry.partyNodeId = id;
@@ -388,6 +417,68 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       this._travelPending = false;
       this.element?.classList.remove("is-traveling");
     }
+  }
+
+  async _captureTokens(scene) {
+    const tokens = Array.from(scene?.tokens ?? []).filter((token) => getSceneMapTokenSource(token));
+    if (!tokens.length) return true;
+    return this._write((maps) => {
+      for (const token of tokens) {
+        const source = getSceneMapTokenSource(token);
+        const node = maps.find((entry) => entry.id === source.mapId)?.nodes.find((entry) => entry.id === source.nodeId);
+        const attachment = node?.tokens.find((entry) => entry.id === source.id);
+        if (attachment) {
+          attachment.tokenData = cleanSceneMapToken(token.toObject());
+          attachment.name = token.name;
+          attachment.img = token.texture?.src ?? attachment.img;
+        }
+      }
+    });
+  }
+
+  _showCharacters(target) {
+    this._tokenNodeId = target.dataset.nodeId;
+    this.render({ force: false });
+  }
+
+  _hideCharacters() {
+    this._tokenNodeId = "";
+    this.render({ force: false });
+  }
+
+  async _attachCharacters(mapId, nodeId, data) {
+    if (this._travelPending) {
+      ui.notifications.warn("Wait for the Scene to finish loading before attaching characters.");
+      return;
+    }
+    const attachments = await Promise.all(data.map((entry) => makeSceneMapAttachment(entry)));
+    if (!attachments.length) return;
+    this._tokenNodeId = nodeId;
+    const saved = await this._editMap(mapId, (map) => {
+      const node = map.nodes.find((entry) => entry.id === nodeId);
+      if (!node) throw new Error("The place for these characters was removed.");
+      node.tokens.push(...attachments);
+    });
+    if (saved) ui.notifications.info(`Attached ${attachments.length} character${attachments.length === 1 ? "" : "s"}. Load this place to use them.`);
+  }
+
+  async _attachSelectedTokens() {
+    const selected = globalThis.canvas?.tokens?.controlled ?? [];
+    if (!selected.length) {
+      ui.notifications.warn("Select tokens on the Foundry canvas first, or drop Actors onto a place.");
+      return;
+    }
+    await this._attachCharacters(this.mapId, this._tokenNodeId,
+      selected.map((token) => ({ uuid: token.document.uuid })));
+  }
+
+  async _removeCharacter(target) {
+    if (this._travelPending) return;
+    const saved = await this._editMap(this.mapId, (map) => {
+      const node = map.nodes.find((entry) => entry.id === this._tokenNodeId);
+      if (node) node.tokens = node.tokens.filter((entry) => entry.id !== target.dataset.tokenId);
+    });
+    if (saved) ui.notifications.info("Character detached. Load this place again to update its tokens.");
   }
 
   async _removeNode(target) {
@@ -417,12 +508,12 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       event.preventDefault();
       this._zoom(Math.exp(-event.deltaY * 0.001), event.clientX, event.clientY);
     }, { signal, passive: false });
-    viewport.addEventListener("dragover", (event) => {
+    root.addEventListener("dragover", (event) => {
       event.preventDefault();
       event.stopPropagation();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
     }, { signal });
-    viewport.addEventListener("drop", (event) => this._drop(event), { signal });
+    root.addEventListener("drop", (event) => this._drop(event), { signal });
     root.addEventListener("keydown", (event) => {
       if (event.key !== "Escape" || !this._linkMode) return;
       event.preventDefault();
@@ -590,6 +681,15 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       const raw = event.dataTransfer?.getData("text/plain");
       if (!raw) return;
       const data = JSON.parse(raw);
+      if (["Actor", "Token"].includes(data.type) && typeof data.uuid === "string") {
+        const nodeId = event.target.closest("[data-node-id]")?.dataset.nodeId;
+        if (!nodeId) {
+          ui.notifications.warn("Drop characters onto a Scene Map place or its Characters panel.");
+          return;
+        }
+        await this._attachCharacters(mapId, nodeId, [data]);
+        return;
+      }
       if (data.type !== "Scene" || typeof data.uuid !== "string") return;
       const scene = await fromUuid(data.uuid);
       if (scene?.documentName === "Scene" && game.scenes.get(scene.id) === scene) {

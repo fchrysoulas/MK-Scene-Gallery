@@ -4,6 +4,23 @@ const coordinate = (value) => {
   return Number.isFinite(number) ? Math.min(100000, Math.max(-100000, number)) : 0;
 };
 
+function normalizeTokens(value) {
+  const ids = new Set();
+  return (Array.isArray(value) ? value : []).flatMap((token) => {
+    if (!token || typeof token.id !== "string" || !token.id || ids.has(token.id)
+      || typeof token.actorUuid !== "string" || !token.actorUuid) return [];
+    ids.add(token.id);
+    return [{
+      id: token.id, actorUuid: token.actorUuid,
+      sourceTokenUuid: typeof token.sourceTokenUuid === "string" ? token.sourceTokenUuid : "",
+      name: typeof token.name === "string" ? token.name : "Character",
+      img: typeof token.img === "string" ? token.img : "",
+      tokenData: token.tokenData && typeof token.tokenData === "object" && !Array.isArray(token.tokenData)
+        ? token.tokenData : null
+    }];
+  });
+}
+
 export function normalizeSceneMaps(value) {
   const mapIds = new Set();
   return (Array.isArray(value) ? value : []).flatMap((map) => {
@@ -18,7 +35,8 @@ export function normalizeSceneMaps(value) {
       const sceneId = typeof node.sceneId === "string" ? node.sceneId : "";
       if (!path && !sceneId) return [];
       nodeIds.add(node.id);
-      return [{ id: node.id, path, sceneId, x: coordinate(node.x), y: coordinate(node.y) }];
+      return [{ id: node.id, path, sceneId, x: coordinate(node.x), y: coordinate(node.y),
+        tokens: normalizeTokens(node.tokens) }];
     });
     const pairs = new Set();
     const links = (Array.isArray(map.links) ? map.links : []).flatMap((link) => {

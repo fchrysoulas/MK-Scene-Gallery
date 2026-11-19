@@ -27,7 +27,8 @@
     <button type="button" data-action="zoom-in" title="Zoom in" aria-label="Zoom in"><i class="fas fa-plus" aria-hidden="true"></i></button>
     <button type="button" data-action="fit-map" title="Fit map in window"><i class="fas fa-expand" aria-hidden="true"></i> Fit</button>
   </div>
-  <section class="mg-map-viewport {{#if linkMode}}is-linking{{/if}}" aria-label="Scene Map canvas" tabindex="0">
+  <div class="mg-map-body">
+    <section class="mg-map-viewport {{#if linkMode}}is-linking{{/if}}" aria-label="Scene Map canvas" tabindex="0">
     <div class="mg-map-world">
       <svg class="mg-map-links" width="1" height="1" aria-hidden="true">
         {{#each links}}
@@ -43,7 +44,7 @@
             <span>{{label}}</span><i class="fas fa-grip-vertical" aria-hidden="true"></i>
           </div>
           <button type="button" class="mg-map-image" data-action="visit-node" data-node-id="{{id}}"
-            title="{{#if @root.linkMode}}Choose {{label}} to link{{else}}{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the active Scene{{/if}}{{/if}}"
+            title="{{#if @root.linkMode}}Choose {{label}} to link{{else}}{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the selected Scene{{/if}}{{/if}}"
             aria-label="{{#if @root.linkMode}}Link {{label}}{{else}}Travel to {{label}}{{/if}}">
             {{#if url}}
               {{#if isVideo}}<video src="{{url}}" muted playsinline preload="metadata" aria-label="{{label}}"></video>
@@ -52,9 +53,10 @@
             {{#if missing}}<span class="mg-map-missing">Scene removed</span>{{/if}}
           </button>
           <footer>
-            <button type="button" data-action="group-here" data-node-id="{{id}}" title="{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the active Scene{{/if}} and move the group here" aria-label="Move group to {{label}}">
+            <button type="button" data-action="group-here" data-node-id="{{id}}" title="{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the selected Scene{{/if}} and move the group here" aria-label="Move group to {{label}}">
               <i class="fas fa-people-group" aria-hidden="true"></i> Group here
             </button>
+            <button type="button" data-action="node-characters" data-node-id="{{id}}" title="Characters attached to {{label}}" aria-label="Characters attached to {{label}}: {{tokenCount}}"><i class="fas fa-user" aria-hidden="true"></i> {{tokenCount}}</button>
             <button type="button" data-action="remove-node" data-node-id="{{id}}" class="mg-map-danger" title="Remove from map" aria-label="Remove {{label}} from map"><i class="fas fa-xmark" aria-hidden="true"></i></button>
           </footer>
         </article>
@@ -68,10 +70,32 @@
         <button type="button" data-action="{{#if hasMap}}open-gallery{{else}}new-map{{/if}}"><i class="fas fa-plus" aria-hidden="true"></i> {{#if hasMap}}Add gallery images{{else}}Create Scene Map{{/if}}</button>
       </div>
     {{/unless}}
-  </section>
+    </section>
+    {{#if characterNode}}
+      <aside class="mg-map-characters" data-node-id="{{characterNode.id}}" aria-label="Characters attached to {{characterNode.label}}">
+        <header>
+          <h3>{{characterNode.label}}</h3>
+          <button type="button" data-action="close-characters" title="Close Characters" aria-label="Close Characters"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <p>Drop Actors here or onto this place. Characters appear when you load the place with its image or Group here button.</p>
+        <button type="button" data-action="attach-selected-tokens"><i class="fas fa-users" aria-hidden="true"></i> Attach selected canvas tokens</button>
+        <p>Canvas tokens keep their appearance and position. New Actors start near the Scene center. Repeated drops add extra copies.</p>
+        <ul class="mg-map-character-list">
+          {{#each characterNode.tokens}}
+            <li>
+              {{#if img}}<img src="{{img}}" alt="" loading="lazy">{{else}}<i class="fas fa-user" aria-hidden="true"></i>{{/if}}
+              <span>{{name}}</span>
+              <button type="button" data-action="remove-character" data-token-id="{{id}}" title="Detach {{name}}" aria-label="Detach {{name}}"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+            </li>
+          {{else}}<li class="mg-map-no-characters">No characters attached yet.</li>{{/each}}
+        </ul>
+        <p>Loading another place swaps Scene Map tokens and remembers their state. Other Scene tokens stay in place. Detaching takes effect the next time you load this place.</p>
+      </aside>
+    {{/if}}
+  </div>
   <footer class="mg-map-status">
     <span><i class="fas fa-people-group" aria-hidden="true"></i> Group: <strong>{{partyLabel}}</strong></span>
     <span>{{nodeCount}} places &middot; {{linkCount}} connections</span>
-    <span title="Image nodes change this Scene's background. Foundry Scene nodes activate their linked Scene.">Active Scene: <strong>{{activeScene}}</strong></span>
+    <span title="Image nodes change the selected/viewed Scene's background. Foundry Scene nodes activate their linked Scene.">Selected Scene: <strong>{{selectedScene}}</strong></span>
   </footer>
 </div>

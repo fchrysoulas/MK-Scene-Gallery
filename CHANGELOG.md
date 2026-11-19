@@ -4,6 +4,18 @@ All notable changes to MK-Scene-Gallery are documented here.
 
 ## Unreleased
 
+## 0.14.0
+
+- Added an always-on-top GM toolbar with a Scene Map selector, Open and Gallery
+  buttons, and an MK Actors button when that module is enabled.
+- The toolbar can be moved with its drag handle or arrow keys and remembers
+  its position on each client.
+- Attach Actors or canvas tokens to Scene Map places and load their tokens with
+  the place. Manage attachments in a Characters panel, preserve token state
+  between visits, and avoid duplicate tokens on repeat visits.
+- Scene Map image nodes now update the selected/viewed Scene instead of the
+  active Scene. Foundry Scene nodes continue to activate their linked Scene.
+
 ## 0.13.0
 
 - Added multiple Scene Maps with draggable image and Foundry Scene nodes,
