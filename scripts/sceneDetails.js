@@ -69,7 +69,11 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _onClose(options) {
+    this._events?.abort();
+    this._drafts.clear();
     this.gallery?._releaseSceneDetailsApp(this);
+    this.gallery = null;
+    this.image = null;
     super._onClose(options);
   }
 
@@ -164,6 +168,8 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _onRender(context, options) {
     super._onRender(context, options);
+    this._events?.abort();
+    this._events = new AbortController();
 
     const root = this.element;
     this._restoreDraft(root);
@@ -172,11 +178,11 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const form = root.querySelector("[data-role='image-details-form']");
     form?.addEventListener("input", () => {
       this._setFormDirty(true, root);
-    });
+    }, { signal: this._events.signal });
     form?.addEventListener("change", () => {
       this._setFormDirty(true, root);
-    });
-    form?.addEventListener("submit", (event) => this._saveImageDetails(event));
+    }, { signal: this._events.signal });
+    form?.addEventListener("submit", (event) => this._saveImageDetails(event), { signal: this._events.signal });
 
     this._bindPresetSliders(root);
     this._bindDocumentDropControls(root);
@@ -226,14 +232,14 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
       range.addEventListener("input", () => {
         field.value = range.value;
         this._syncPresetSliders(root);
-      });
+      }, { signal: this._events.signal });
       reset?.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         field.value = "";
         this._syncPresetSliders(root);
         field.dispatchEvent(new Event("change", { bubbles: true }));
-      });
+      }, { signal: this._events.signal });
     }
 
     this._syncPresetSliders(root);
@@ -241,7 +247,7 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _bindSectionTabs(root) {
     for (const tab of Array.from(root?.querySelectorAll?.("[data-role='settings-tab']") ?? [])) {
-      tab.addEventListener("keydown", (event) => this._handleSectionTabKeydown(event));
+      tab.addEventListener("keydown", (event) => this._handleSectionTabKeydown(event), { signal: this._events.signal });
     }
   }
 
@@ -282,11 +288,11 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
           // Some browser drag sources expose a read-only dataTransfer object.
         }
         target.classList.add("is-dragover");
-      });
+      }, { signal: this._events.signal });
 
       target.addEventListener("dragleave", (event) => {
         if (!target.contains(event.relatedTarget)) target.classList.remove("is-dragover");
-      });
+      }, { signal: this._events.signal });
 
       target.addEventListener("drop", (event) => {
         target.classList.remove("is-dragover");
@@ -294,7 +300,7 @@ export class SceneDetailsApp extends HandlebarsApplicationMixin(ApplicationV2) {
           console.error(`${MODULE_ID} | Could not use dropped document`, error);
           ui.notifications.error("Could not use the dropped document.");
         });
-      });
+      }, { signal: this._events.signal });
     }
   }
 

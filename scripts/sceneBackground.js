@@ -1,5 +1,13 @@
 import { MODULE_ID } from "./settings.js";
 import { updateBackgroundDocumentWithTransition } from "./backgroundTransitions.js";
+import { LatestTaskQueue } from "./taskQueue.js";
+
+const imageSelections = new LatestTaskQueue();
+
+export function queueSceneImageSelection(scene, operation) {
+  if (!scene) return operation();
+  return imageSelections.enqueue(scene.id, operation, { replacePending: true });
+}
 
 function getImageLabel(path) {
   const fileName = String(path || "").split("/").pop() || "Scene background";
@@ -59,11 +67,11 @@ async function performSetSceneBackground(scene, path) {
   }
 
   try {
-    await updateBackgroundDocumentWithTransition(
+    const result = await updateBackgroundDocumentWithTransition(
       backgroundDocument,
       { "background.src": backgroundPath }
     );
-    return true;
+    return result !== null;
   } catch (error) {
     console.error(`${MODULE_ID} | Could not set the Scene background`, error);
     ui.notifications.error(`Could not set the Scene background: ${error?.message ?? error}`);
@@ -99,10 +107,11 @@ async function performRemoveSceneBackground(scene) {
   }
 
   try {
-    await updateBackgroundDocumentWithTransition(
+    const result = await updateBackgroundDocumentWithTransition(
       backgroundDocument,
       { "background.src": Number(game.release?.generation) >= 14 ? "" : null }
     );
+    if (result === null) return false;
     ui.notifications.info(`Removed ${background.name} from the Scene background.`);
     return true;
   } catch (error) {

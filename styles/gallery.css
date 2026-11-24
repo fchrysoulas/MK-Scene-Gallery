@@ -2344,23 +2344,33 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
   padding: 15px;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.13) transparent;
 }
 
 .mg-grid {
+  --mg-card-min-width: 158px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--mg-card-min-width)), 1fr));
+  grid-auto-rows: calc(170px + max(22px, var(--mg-image-title-font-size, 12px) * 1.35 + 1px));
   gap: 12px;
+}
+
+.mg-grid-spacer {
+  pointer-events: none;
+}
+
+[data-role="gallery-shown"][hidden] {
+  display: none;
 }
 
 .mg-thumb {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  content-visibility: auto;
-  contain-intrinsic-size: 180px 180px;
   border: 1px solid var(--mg-border);
   border-radius: 10px;
   padding: 7px;
@@ -2687,21 +2697,6 @@
   font-size: 12px;
   font-weight: 600;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-.mg-loading-more-overlay {
-  background: rgba(6, 9, 15, 0.42);
-  backdrop-filter: blur(5px) saturate(110%);
-}
-
-.mg-loading-more-overlay[hidden] {
-  display: none;
-}
-
-.mg-loading-more-overlay .mg-spinner {
-  width: 34px;
-  height: 34px;
-  border-width: 2px;
 }
 
 .mg-tree-scroll::-webkit-scrollbar,

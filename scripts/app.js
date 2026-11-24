@@ -6,6 +6,7 @@ import {
 import { clearIndexCache, getMediaType } from "./fileIndex.js";
 import {
   getSceneBackground,
+  queueSceneImageSelection,
   removeSceneBackground,
   setSceneBackground
 } from "./sceneBackground.js";
@@ -22,6 +23,7 @@ import {
   readScenePresetForm
 } from "./scenePresets.js";
 import { GalleryIndexingMixin } from "./galleryIndexing.js";
+import { GALLERY_GRID_TEMPLATE, GalleryVirtualizationMixin } from "./galleryVirtualization.js";
 import { GalleryFoldersMixin, moveImagesToVirtualFolder } from "./galleryFolders.js";
 import {
   getGalleryWindowTitle,
@@ -52,7 +54,7 @@ const SCENE_PRESET_SECTION_FIELDS = Object.freeze({
   "initial-view": new Set(["initialX", "initialY", "initialScale"])
 });
 
-export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(HandlebarsApplicationMixin(ApplicationV2))) {
+export class MediaGalleryApp extends GalleryVirtualizationMixin(GalleryFoldersMixin(GalleryIndexingMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   static DEFAULT_OPTIONS = {
     id: "mk-scene-gallery-app",
     classes: ["mk-scene-gallery", "mg-glass-window"],
@@ -186,7 +188,14 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._virtualFolders = [];
     this._virtualFolderPaths = new Map();
     this._allMediaExcludedPaths = new Set();
-    this._folderDragHandler = (event) => this._handleFolderDrag(event);
+    this._folderDragHandler = (event) => {
+      if (event.type === "dragstart") this._galleryDragging = true;
+      if (event.type === "dragend") {
+        this._galleryDragging = false;
+        this._scheduleGalleryWindowUpdate();
+      }
+      this._handleFolderDrag(event);
+    };
     const savedPins = game.settings.get(MODULE_ID, "pinnedFolders");
     this._pinnedFolders = new Set(
       Array.isArray(savedPins)
@@ -230,19 +239,20 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._sceneRerenderTimer = null;
     this._thumbnailVideoObserver = null;
     this._galleryScrollElement = null;
-    this._galleryScrollHandler = (event) => this._maybeLoadMore(event.currentTarget);
+    this._galleryScrollHandler = () => this._scheduleGalleryWindowUpdate();
     this._galleryInteractionRoot = null;
     this._galleryInteractionHandler = (event) => this._handleGalleryInteraction(event);
     this._galleryLoadCheckTimer = null;
-    this._loadMoreCompleteTimer = null;
     this._loadMorePending = false;
-    this._isLoadingMore = false;
     this._canLoadMore = false;
     this._activeThumbnailVideo = null;
   }
 
   async close(options = {}) {
     this._isClosing = true;
+    this._disconnectGalleryViewport();
+    this._cancelIndexing();
+    this._renderEvents?.abort();
     this._indexRunId += 1;
     this.loading = false;
     this._indexPromise = null;
@@ -259,18 +269,26 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       clearTimeout(this._galleryLoadCheckTimer);
       this._galleryLoadCheckTimer = null;
     }
-    if (this._loadMoreCompleteTimer) {
-      clearTimeout(this._loadMoreCompleteTimer);
-      this._loadMoreCompleteTimer = null;
-    }
-    this._isLoadingMore = false;
     this._galleryScrollElement?.removeEventListener("scroll", this._galleryScrollHandler);
     this._galleryScrollElement = null;
     this._removeGalleryInteractionListeners();
     this._pauseActiveThumbnailVideo();
+    // Previews can stay open independently without retaining the closed
+    // gallery's file index, cached tree, and event handlers.
+    if (this._imagePreviewApp) this._imagePreviewApp.gallery = null;
+    this._imagePreviewApp = null;
     await this._sceneDetailsApp?.close?.();
     this._thumbnailVideoObserver?.disconnect?.();
     this._thumbnailVideoObserver = null;
+    this.files = [];
+    this.total = 0;
+    this._invalidateFileObjectsCache();
+    this._folderSelection.clear();
+    this._openFolders.clear();
+    this._virtualFoldersSource = null;
+    this._virtualFolders = [];
+    this._virtualFolderPaths.clear();
+    this._allMediaExcludedPaths.clear();
     return super.close(options);
   }
 
@@ -291,8 +309,11 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   async _prepareContext(options) {
+    this._galleryWindowRevision = (this._galleryWindowRevision ?? 0) + 1;
     const context = await super._prepareContext(options);
-    return foundry.utils.mergeObject(context, this.getData(), { inplace: false });
+    const data = this.getData();
+    data.galleryGrid = await foundry.applications.handlebars.renderTemplate(GALLERY_GRID_TEMPLATE, data);
+    return foundry.utils.mergeObject(context, data, { inplace: false });
   }
 
   _formatSceneNumber(value) {
@@ -799,6 +820,9 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       : DEFAULT_PAGE_SIZE;
     const rootPath = this._normalizeBaseDir(baseDir);
     const query = (this.filter || "").trim().toLowerCase();
+    this._resetGalleryView(JSON.stringify([
+      rootPath, this._activeFolder, this._activeVirtualFolder, this._quickFilter, this._tagFilter, query
+    ]));
     const cached = this._visibleFilesCache;
     if (
       cached?.fileObjs === fileObjs
@@ -808,9 +832,8 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       && cached.quickFilter === this._quickFilter
       && cached.tagFilter === this._tagFilter
       && cached.query === query
-      && cached.page === this.page
       && cached.filterRevision === this._filterRevision
-    ) return cached.result;
+    ) return { fileObjs, ...this._windowGalleryFiles(cached.filtered, pageSize) };
 
     let candidates;
 
@@ -848,10 +871,6 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
         || file.folder.toLowerCase().includes(query);
     });
 
-    const end = (this.page + 1) * pageSize;
-    const visible = filtered.slice(0, end);
-
-    const result = { fileObjs, filtered, visible };
     this._visibleFilesCache = {
       fileObjs,
       baseDir: rootPath,
@@ -860,11 +879,10 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       quickFilter: this._quickFilter,
       tagFilter: this._tagFilter,
       query,
-      page: this.page,
       filterRevision: this._filterRevision,
-      result
+      filtered
     };
-    return result;
+    return { fileObjs, ...this._windowGalleryFiles(filtered, pageSize) };
   }
 
   _normalizeTags(rawTags) {
@@ -940,13 +958,12 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     const virtualFolders = this._prepareVirtualFolders(fileObjs);
     const activeVirtualFolder = virtualFolders.find((folder) => folder.selected);
     const tree = this._buildTree(fileObjs, baseDir);
-    const { filtered, visible } = this._getVisibleFiles(fileObjs, baseDir);
+    const { filtered, visible, loadedCount, galleryWindow } = this._getVisibleFiles(fileObjs, baseDir);
     const filteredPaths = new Set(filtered.map((file) => file.path));
     for (const path of this._folderSelection) {
       if (!filteredPaths.has(path)) this._folderSelection.delete(path);
     }
     for (const file of fileObjs) file.folderSelected = this._folderSelection.has(file.path);
-    this._canLoadMore = visible.length < filtered.length;
     const nodeMap = this._treeCache?.fileObjs === fileObjs
       ? this._treeCache.nodeMap
       : null;
@@ -1023,7 +1040,8 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       filter: this.filter,
       totalIndexed: this.total,
       totalFiltered: filtered.length,
-      showing: visible.length,
+      showing: loadedCount,
+      galleryWindow,
       canLoadMore: this._canLoadMore,
       isIndexing: !!this.loading,
       isUploading: !!this._isUploading,
@@ -1059,10 +1077,12 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
 
   _onRender(context, options) {
     super._onRender(context, options);
+    this._renderEvents?.abort();
+    this._renderEvents = new AbortController();
+    const signal = this._renderEvents.signal;
 
     const root = this.element;
     this._loadMorePending = false;
-    this._setLoadingMoreOverlay(this._isLoadingMore, root);
     if (this._galleryInteractionRoot !== root) {
       this._removeGalleryInteractionListeners();
       this._galleryInteractionRoot = root;
@@ -1077,39 +1097,25 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._pauseActiveThumbnailVideo();
     this._thumbnailVideoObserver?.disconnect?.();
     this._thumbnailVideoObserver = null;
+    this._thumbnailVideoEvents?.abort();
 
     const galleryScroll = root.querySelector(".mg-gallery-scroll");
-    if (this._galleryScrollElement !== galleryScroll) {
-      this._galleryScrollElement?.removeEventListener("scroll", this._galleryScrollHandler);
-      this._galleryScrollElement = galleryScroll;
-      galleryScroll?.addEventListener("scroll", this._galleryScrollHandler, { passive: true });
-    }
-    this._scheduleGalleryLoadCheck(galleryScroll);
-    if (this._isLoadingMore) {
-      if (this._loadMoreCompleteTimer) clearTimeout(this._loadMoreCompleteTimer);
-      this._loadMoreCompleteTimer = setTimeout(() => {
-        this._loadMoreCompleteTimer = null;
-        if (this._isClosing) return;
-        this._isLoadingMore = false;
-        this._setLoadingMoreOverlay(false);
-        this._scheduleGalleryLoadCheck(this._galleryScrollElement);
-      }, 120);
-    }
+    this._connectGalleryViewport(galleryScroll, context.galleryWindow);
 
     root.querySelector("[data-role='toggle-recursive']")
-      ?.addEventListener("change", (event) => this._toggleRecursive(event));
+      ?.addEventListener("change", (event) => this._toggleRecursive(event), { signal });
     root.querySelector("[data-role='search']")
-      ?.addEventListener("input", (event) => this._onSearchInput(event));
+      ?.addEventListener("input", (event) => this._onSearchInput(event), { signal });
     const gridSizeSlider = root.querySelector("[data-role='grid-size']");
     const gridSizeOutput = root.querySelector("[data-role='grid-size-value']");
     gridSizeSlider?.addEventListener("input", (event) => {
       if (gridSizeOutput) gridSizeOutput.textContent = event.currentTarget.value;
-    });
-    gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
+    }, { signal });
+    gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event), { signal });
     root.querySelector("[data-role='lockview-anchor']")
-      ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
+      ?.addEventListener("change", (event) => this._anchorLockViewBounds(event), { signal });
     root.querySelector("[data-role='transition-effect']")
-      ?.addEventListener("change", (event) => void this._changeTransitionEffect(event));
+      ?.addEventListener("change", (event) => void this._changeTransitionEffect(event), { signal });
 
     this._bindThumbnailVideos(root);
 
@@ -1143,14 +1149,6 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     this._galleryInteractionRoot = null;
   }
 
-  _setLoadingMoreOverlay(visible, root = this.element) {
-    const overlay = root?.querySelector?.("[data-role='loading-more']");
-    if (!overlay) return;
-
-    overlay.hidden = !visible;
-    overlay.setAttribute("aria-hidden", String(!visible));
-  }
-
   _handleGalleryInteraction(event) {
     const target = event.target;
     if (event.type === "error") {
@@ -1167,6 +1165,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     if (event.type === "click") this._selectImage(event);
     else if (event.type === "contextmenu") this._openSceneDetails(event);
     else if (event.type === "keydown") {
+      if (this._handleGalleryTab(event, thumb)) return;
       if (event.key !== "Enter" && event.key !== " ") return;
       if (target?.closest?.("[data-action]")) return;
       event.preventDefault();
@@ -1175,11 +1174,13 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   _bindThumbnailVideos(root) {
+    this._thumbnailVideoEvents?.abort();
+    this._thumbnailVideoEvents = new AbortController();
     const videos = Array.from(root.querySelectorAll(".mg-thumb .mg-video"));
     if (!videos.length) return;
 
     const play = (video) => {
-      if (!video?.isConnected) return;
+      if (this._isClosing || !video?.isConnected) return;
       if (this._activeThumbnailVideo && this._activeThumbnailVideo !== video) {
         pause(this._activeThumbnailVideo);
       }
@@ -1218,12 +1219,13 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
 
     for (const video of videos) {
       const thumb = video.closest(".mg-thumb");
-      thumb?.addEventListener("pointerenter", () => play(video));
-      thumb?.addEventListener("pointerleave", () => pause(video));
-      thumb?.addEventListener("focusin", () => play(video));
+      const signal = this._thumbnailVideoEvents.signal;
+      thumb?.addEventListener("pointerenter", () => play(video), { signal });
+      thumb?.addEventListener("pointerleave", () => pause(video), { signal });
+      thumb?.addEventListener("focusin", () => play(video), { signal });
       thumb?.addEventListener("focusout", (event) => {
         if (!thumb.contains(event.relatedTarget)) pause(video);
-      });
+      }, { signal });
     }
   }
 
@@ -1831,6 +1833,10 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   async _displayImage(path, scene = this._getSelectedScene()) {
+    return !!(await queueSceneImageSelection(scene, () => this._performDisplayImage(path, scene)));
+  }
+
+  async _performDisplayImage(path, scene) {
     if (!path) {
       ui.notifications.warn("No image path found.");
       return false;
@@ -2013,11 +2019,8 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   _loadMore() {
-    if (this._isClosing || this.loading || this._isLoadingMore || !this._canLoadMore) return;
+    if (this._isClosing || this.loading || !this._canLoadMore) return;
     this.page += 1;
-    this._isLoadingMore = true;
-    this._setLoadingMoreOverlay(true);
-    this._safeRender(false);
   }
 
   _maybeLoadMore(scrollElement) {
@@ -2025,7 +2028,6 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       !scrollElement
       || this._isClosing
       || this.loading
-      || this._isLoadingMore
       || this._loadMorePending
       || !this._canLoadMore
     ) return;
@@ -2045,7 +2047,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
 
     this._galleryLoadCheckTimer = setTimeout(() => {
       this._galleryLoadCheckTimer = null;
-      if (scrollElement.isConnected) this._maybeLoadMore(scrollElement);
+      if (scrollElement.isConnected) this._scheduleGalleryWindowUpdate();
     }, 0);
   }
 

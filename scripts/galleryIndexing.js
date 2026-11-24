@@ -2,7 +2,13 @@ import { MODULE_ID } from "./settings.js";
 import { indexImages, getCachedIndex } from "./fileIndex.js";
 
 export const GalleryIndexingMixin = (Base) => class extends Base {
+  _cancelIndexing() {
+    this._indexController?.abort();
+    this._indexController = null;
+  }
+
   _resetIndexState({ activeFolder = "" } = {}) {
+    this._cancelIndexing();
     this.page = 0;
     this._folderSelection.clear();
     this._openFolders.clear();
@@ -81,6 +87,8 @@ export const GalleryIndexingMixin = (Base) => class extends Base {
     }
 
     const runId = ++this._indexRunId;
+    const controller = new AbortController();
+    this._indexController = controller;
 
     this.loading = true;
     this._indexed = false;
@@ -99,6 +107,7 @@ export const GalleryIndexingMixin = (Base) => class extends Base {
           recursive,
           maxConcurrent: 4,
           browseTimeoutMs: 15000,
+          signal: controller.signal,
           onBatch: (newFiles) => {
             if (runId !== this._indexRunId || this._isClosing) return;
             if (newFiles?.length) this.files.push(...newFiles);
@@ -119,6 +128,7 @@ export const GalleryIndexingMixin = (Base) => class extends Base {
         console.warn(`${MODULE_ID} | Indexing failed`, error);
         this._applyIndexedFiles([]);
       } finally {
+        if (this._indexController === controller) this._indexController = null;
         if (runId !== this._indexRunId) return;
 
         this.loading = false;

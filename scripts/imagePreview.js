@@ -35,7 +35,21 @@ export class ImagePreviewApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   setImage(image) {
+    if (this.image?.path !== image?.path) this._releaseMedia();
     this.image = image;
+  }
+
+  _releaseMedia() {
+    for (const video of this.element?.querySelectorAll?.("video") ?? []) {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    }
+  }
+
+  async close(options = {}) {
+    this._releaseMedia();
+    return super.close(options);
   }
 
   async _prepareContext(options) {
@@ -48,6 +62,8 @@ export class ImagePreviewApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _onClose(options) {
     this.gallery?._releaseImagePreviewApp(this);
+    this.gallery = null;
+    this.image = null;
     super._onClose(options);
   }
 }

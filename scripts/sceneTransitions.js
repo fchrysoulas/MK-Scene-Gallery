@@ -51,7 +51,8 @@ function createSceneSnapshot() {
 
 function prepareSceneTransition(id, sceneId, effect) {
   const duration = getBackgroundTransitionDuration();
-  if (duration <= 0 || effect === "none" || globalThis.canvas?.scene?.id === sceneId) return null;
+  if (duration <= 0 || effect === "none" || globalThis.document?.hidden
+    || globalThis.canvas?.scene?.id === sceneId) return null;
   // Only one screen cover can be visible on this client.
   for (const record of transitions.values()) destroyTransition(record);
   let application;

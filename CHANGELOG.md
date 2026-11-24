@@ -2,6 +2,22 @@
 
 All notable changes to MK-Scene-Gallery are documented here.
 
+## 0.15.1
+
+- Window gallery thumbnails to the viewport with buffered rows and reusable
+  media cards; scroll batches update the grid without rebuilding the sidebar.
+- Keep the latest pending image selection per Scene, including its preset and
+  linked actions, and coalesce image-only background updates without discarding
+  document edits which also change other fields.
+- Cancel indexing when a gallery closes or its folder changes, bound cached
+  indexes, and prevent cancelled or invalidated scans from restoring stale data.
+- Release gallery caches, preview references, video resources, and render event
+  listeners when windows close or their content is replaced.
+- Bound background animation and resource waits so stalled frames cannot retain
+  overlays indefinitely; clean overlays on canvas teardown and skip hidden-tab effects.
+- Reuse normalized Scene Map data, debounce hook-driven redraws, and update only
+  a dragged node's connected links instead of rebuilding map data on every move.
+
 ## 0.15.0
 
 - Incorporated built-in Battle Transitions effects with a world-wide gallery

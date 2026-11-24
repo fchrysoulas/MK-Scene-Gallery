@@ -1,0 +1,108 @@
+{{#*inline "thumbCard"}}
+  <article
+    class="mg-thumb {{#if selected}}is-selected{{/if}} {{#if folderSelected}}is-folder-selected{{/if}}"
+    data-path="{{path}}"
+    draggable="true"
+    title="{{path}} — Left-click to select; right-click for Scene Details"
+    tabindex="0"
+    {{#if selected}}aria-current="true"{{/if}}
+  >
+    <div class="mg-thumb-img">
+      {{#if isVideo}}
+        <video
+          class="mg-img mg-video"
+          src="{{url}}"
+          aria-label="{{label}}"
+          muted
+          loop
+          playsinline
+          preload="none"
+        ></video>
+      {{else}}
+        <img
+          class="mg-img"
+          src="{{url}}"
+          alt="{{label}}"
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+          draggable="false"
+        >
+      {{/if}}
+      {{#if hasScenePreset}}
+        <span
+          class="mg-scene-preset-indicator"
+          title="Scene preset saved"
+          aria-label="Scene preset saved"
+        >
+          <i class="fas fa-map" aria-hidden="true"></i>
+        </span>
+      {{/if}}
+      <button
+        type="button"
+        class="mg-favorite-action {{#if favorite}}is-favorite{{/if}}"
+        data-action="toggle-favorite"
+        data-path="{{path}}"
+        data-title="{{label}}"
+        title="{{#if favorite}}Remove from Favorites{{else}}Add to Favorites{{/if}}"
+        aria-label="{{#if favorite}}Remove {{label}} from Favorites{{else}}Add {{label}} to Favorites{{/if}}"
+        aria-pressed="{{#if favorite}}true{{else}}false{{/if}}"
+      >
+        <i class="{{#if favorite}}fas{{else}}far{{/if}} fa-star" aria-hidden="true"></i>
+      </button>
+      <div class="mg-hover-actions">
+        <button type="button" class="mg-action" data-action="add-to-scene-map"
+          data-path="{{path}}" title="Add to Scene Map" aria-label="Add {{label}} to Scene Map">
+          <i class="fas fa-diagram-project" aria-hidden="true"></i>
+        </button>
+        <button type="button" class="mg-action" data-action="move-to-virtual-folder"
+          data-path="{{path}}" title="Move to virtual folder" aria-label="Move {{label}} to virtual folder">
+          <i class="fas fa-folder-open" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="mg-action"
+          data-action="preview-image"
+          data-path="{{path}}"
+          title="Preview image or video"
+          aria-label="Preview {{label}}"
+        >
+          <i class="fas fa-expand" aria-hidden="true"></i>
+        </button>
+        <button
+          type="button"
+          class="mg-action"
+          data-action="set-scene-background"
+          data-path="{{path}}"
+          data-title="{{label}}"
+          title="Set as the Scene background"
+          aria-label="Set {{label}} as the Scene background"
+        >
+          <i class="fas fa-image" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+    <div class="mg-card-name-row">
+      <button type="button" class="mg-select-image" data-action="toggle-folder-image-selection"
+        data-path="{{path}}" aria-label="Select {{label}} for grouping" title="Select for grouping"
+        aria-pressed="{{#if folderSelected}}true{{else}}false{{/if}}">
+        <i class="{{#if folderSelected}}fas fa-square-check{{else}}far fa-square{{/if}}" aria-hidden="true"></i>
+      </button>
+      <div class="mg-name" title="{{label}}">{{label}}</div>
+    </div>
+    {{#if tags.length}}
+      <div class="mg-card-tags" aria-label="Tags">
+        {{#each displayTags as |tag|}}<span>#{{tag}}</span>{{/each}}
+        {{#if extraTagCount}}<span>+{{extraTagCount}}</span>{{/if}}
+      </div>
+    {{/if}}
+  </article>
+{{/inline}}
+
+<div class="mg-grid-spacer" aria-hidden="true" style="height: {{galleryWindow.top}}px"></div>
+<div class="mg-grid">
+  {{#each visibleFiles as |file|}}
+    {{> thumbCard file}}
+  {{/each}}
+</div>
+<div class="mg-grid-spacer" aria-hidden="true" style="height: {{galleryWindow.bottom}}px"></div>

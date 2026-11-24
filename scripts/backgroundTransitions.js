@@ -7,13 +7,16 @@ import {
   normalizeTransitionEffect,
   setTransitionProgress
 } from "./transitionEffects.js";
+import { animateProgress, waitForRenderFrames, waitForTransitionResource } from "./animation.js";
+import { LatestTaskQueue } from "./taskQueue.js";
 
 const SOCKET_EVENT = `module.${MODULE_ID}`;
 const REMOTE_TRANSITION_TIMEOUT_MS = 15000;
 const NATIVE_BACKGROUND_RENDER_FRAMES = 2;
-const transitionQueues = new Map();
+const transitionQueues = new LatestTaskQueue();
 const remoteTransitions = new Map();
 const completedRemoteTransitions = new Set();
+const liveOverlays = new Set();
 let hooksRegistered = false;
 
 export function getBackgroundTransitionEffect() {
@@ -33,6 +36,7 @@ function getOwningScene(document) {
 }
 
 function getActivePrimaryGroup(document) {
+  if (globalThis.document?.hidden) return null;
   const activeCanvas = globalThis.canvas;
   const scene = getOwningScene(document);
   if (!activeCanvas?.ready || activeCanvas?.scene?.id !== scene?.id) return null;
@@ -49,7 +53,7 @@ async function createTexture(path) {
   if (typeof loadTexture !== "function") {
     throw new Error("Foundry's texture loader is unavailable.");
   }
-  return loadTexture(path);
+  return waitForTransitionResource(loadTexture(path));
 }
 
 function pinTexture(path) {
@@ -76,16 +80,15 @@ function disableInteraction(displayObject) {
   displayObject.eventMode = "none";
 }
 
-async function startSpriteVideo(sprite) {
-  const video = game.video?.getVideoSource?.(sprite) ?? null;
+async function startSpriteVideo(video) {
   if (!video || typeof game.video?.play !== "function") return video;
 
   try {
-    await game.video.play(video, {
+    await waitForTransitionResource(game.video.play(video, {
       playing: true,
       loop: true,
       volume: 0
-    });
+    }));
   } catch (error) {
     console.warn(`${MODULE_ID} | Could not start background transition video`, error);
   }
@@ -203,6 +206,7 @@ function placeAboveNativeBackground(primary, root) {
 
 function destroyOverlay(overlay) {
   if (!overlay?.root) return;
+  liveOverlays.delete(overlay);
 
   if (overlay.pinned) {
     unpinTexture(overlay.path);
@@ -235,6 +239,7 @@ async function createBackgroundOverlay(document, path, primary) {
 
   const root = new PIXI.Container();
   const overlay = { path, root, video: null, pinned: false };
+  liveOverlays.add(overlay);
   root.alpha = 0;
   disableInteraction(root);
 
@@ -249,7 +254,12 @@ async function createBackgroundOverlay(document, path, primary) {
     root.addChild(sprite);
 
     if (path) {
-      overlay.video = await startSpriteVideo(sprite);
+      overlay.video = game.video?.getVideoSource?.(sprite) ?? null;
+      await startSpriteVideo(overlay.video);
+      if (root.destroyed || getActivePrimaryGroup(document) !== primary) {
+        destroyOverlay(overlay);
+        return null;
+      }
       pinTexture(path);
       overlay.pinned = true;
     }
@@ -262,33 +272,12 @@ async function createBackgroundOverlay(document, path, primary) {
   }
 }
 
-function nextAnimationFrame(callback) {
-  return globalThis.requestAnimationFrame(callback);
-}
-
-function waitForRenderFrames(frameCount = NATIVE_BACKGROUND_RENDER_FRAMES) {
-  return new Promise((resolve) => {
-    let remaining = Math.max(1, Math.round(frameCount));
-
-    const waitForNextFrame = () => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        resolve();
-        return;
-      }
-      nextAnimationFrame(waitForNextFrame);
-    };
-
-    nextAnimationFrame(waitForNextFrame);
-  });
-}
-
 async function destroyOverlayAfterNativeRender(overlay) {
   if (!overlay?.root) return;
 
   const parent = overlay?.root?.parent;
   if (parent) parent.renderDirty = true;
-  await waitForRenderFrames();
+  await waitForRenderFrames(NATIVE_BACKGROUND_RENDER_FRAMES);
   destroyOverlay(overlay);
 }
 
@@ -300,26 +289,10 @@ function animateOverlay(overlay, duration, primary) {
     return Promise.resolve(true);
   }
 
-  return new Promise((resolve) => {
-    const startTime = globalThis.performance.now();
-
-    const step = (timestamp) => {
-      if (overlay.root.destroyed || overlay.root.parent !== primary) {
-        resolve(false);
-        return;
-      }
-
-      const elapsed = Math.max(0, timestamp - startTime);
-      const progress = Math.min(1, elapsed / duration);
-      setTransitionProgress(overlay.root, overlay.filter, progress * progress * (3 - (2 * progress)));
-      primary.renderDirty = true;
-
-      if (progress < 1) nextAnimationFrame(step);
-      else resolve(true);
-    };
-
-    nextAnimationFrame(step);
-  });
+  return animateProgress(duration, (progress) => {
+    setTransitionProgress(overlay.root, overlay.filter, progress * progress * (3 - (2 * progress)));
+    primary.renderDirty = true;
+  }, () => !overlay.root.destroyed && overlay.root.parent === primary);
 }
 
 async function prepareBackgroundTransition(document, path, duration, effect) {
@@ -406,15 +379,10 @@ function getDocumentKey(document) {
   return `${getOwningScene(document)?.id}.${document?.documentName || "Document"}.${document?.id || "unknown"}`;
 }
 
-function enqueueTransition(document, operation) {
-  const key = getDocumentKey(document);
-  const previous = transitionQueues.get(key) ?? Promise.resolve();
-  const result = previous.then(operation, operation);
-  const settled = result.catch(() => {}).finally(() => {
-    if (transitionQueues.get(key) === settled) transitionQueues.delete(key);
-  });
-  transitionQueues.set(key, settled);
-  return result;
+function isImageOnlyChange(changes) {
+  return Object.keys(changes).every((key) => key === "background.src"
+    || (key === "background" && changes.background
+      && Object.keys(changes.background).every((field) => field === "src")));
 }
 
 function createTransitionId() {
@@ -439,12 +407,19 @@ function emitTransitionStart(document, path, transitionId, duration, effect) {
 
 export function updateBackgroundDocumentWithTransition(document, changes, options = {}) {
   const { changed, path } = readBackgroundSourceChange(changes);
-  const currentPath = String(document?.background?.src || "").trim() || null;
-  if (!changed || path === currentPath || !shouldTransition(document, changes, options)) {
+  if (!changed || hasTransitionBypass(options)) {
     return document.update(changes, options);
   }
 
-  return enqueueTransition(document, async () => {
+  return transitionQueues.enqueue(getDocumentKey(document), async () => {
+    // Recheck after the current update: the latest request may intentionally
+    // return to the image which was current when it was queued.
+    if (!shouldTransition(document, changes, options)) {
+      return document.update(changes, {
+        ...options,
+        [MODULE_ID]: { ...options[MODULE_ID], skipBackgroundTransition: true }
+      });
+    }
     const duration = getBackgroundTransitionDuration();
     const effect = getBackgroundTransitionEffect();
     const transitionId = createTransitionId();
@@ -471,7 +446,7 @@ export function updateBackgroundDocumentWithTransition(document, changes, option
       // Also release player overlays when the document update fails.
       game.socket?.emit(SOCKET_EVENT, { type: "finishBackgroundTransition", transitionId });
     }
-  });
+  }, { replacePending: isImageOnlyChange(changes) });
 }
 
 function cloneChanges(changes) {
@@ -479,7 +454,9 @@ function cloneChanges(changes) {
 }
 
 function interceptBackgroundUpdate(document, changes, options, userId) {
-  if (!shouldTransition(document, changes, options)) return undefined;
+  if (hasTransitionBypass(options) || !readBackgroundSourceChange(changes).changed) return undefined;
+  if (!shouldTransition(document, changes, options)
+    && !transitionQueues.has(getDocumentKey(document))) return undefined;
 
   const replayChanges = cloneChanges(changes);
   const replayOptions = { ...options, autoReposition: false };
@@ -507,7 +484,10 @@ function resolveBackgroundDocument(message) {
 function finishRemoteTransition(transitionId) {
   if (!transitionId) return;
 
-  completedRemoteTransitions.add(transitionId);
+  if (!completedRemoteTransitions.has(transitionId)) {
+    completedRemoteTransitions.add(transitionId);
+    setTimeout(() => completedRemoteTransitions.delete(transitionId), REMOTE_TRANSITION_TIMEOUT_MS);
+  }
   const record = remoteTransitions.get(transitionId);
   if (record && !record.cleanupPromise) {
     clearTimeout(record.timeoutId);
@@ -518,7 +498,6 @@ function finishRemoteTransition(transitionId) {
     });
   }
 
-  setTimeout(() => completedRemoteTransitions.delete(transitionId), REMOTE_TRANSITION_TIMEOUT_MS);
 }
 
 async function startRemoteTransition(message) {
@@ -585,6 +564,10 @@ export function registerBackgroundTransitionHooks() {
   Hooks.on("updateScene", finishTransitionFromUpdate);
   Hooks.on("updateLevel", finishTransitionFromUpdate);
   Hooks.on("canvasReady", clearRemoteTransitions);
+  Hooks.on("canvasTearDown", () => {
+    clearRemoteTransitions();
+    for (const overlay of liveOverlays) destroyOverlay(overlay);
+  });
   game.socket?.on(SOCKET_EVENT, (message) => {
     void startRemoteTransition(message).catch((error) => {
       console.error(`${MODULE_ID} | Could not play a remote background transition`, error);

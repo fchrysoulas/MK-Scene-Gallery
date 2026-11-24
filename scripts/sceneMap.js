@@ -93,9 +93,17 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._travelPending = false;
     this._tokenNodeId = "";
     const refresh = () => {
-      if (this.rendered && !this._drag && !this._saving) this.render({ force: false });
+      if (!this.rendered || this._drag || this._saving || this._refreshTimer) return;
+      this._refreshTimer = setTimeout(() => {
+        this._refreshTimer = null;
+        if (this.rendered && !this._drag && !this._saving) this.render({ force: false });
+      }, 50);
     };
     this._hookIds = [["updateSetting", Hooks.on("updateSetting", (setting) => {
+      if (setting.key === `${MODULE_ID}.sceneMaps`) {
+        this._mapsSource = null;
+        this._mapsCache = null;
+      }
       if (["sceneMaps", "imageMetadata", "imageTitles"].some((key) => setting.key === `${MODULE_ID}.${key}`)) refresh();
     })]];
     for (const hook of ["updateScene", "deleteScene", "updateLevel", "deleteLevel", "canvasReady"]) {
@@ -104,7 +112,14 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _maps() {
-    return normalizeSceneMaps(game.settings.get(MODULE_ID, "sceneMaps"));
+    const source = game.settings.get(MODULE_ID, "sceneMaps");
+    if (!this._mapsCache || this._mapsSource !== source) {
+      this._mapsSource = source;
+      this._mapsCache = normalizeSceneMaps(source);
+      const ids = new Set(this._mapsCache.map((map) => map.id));
+      for (const id of this._views.keys()) if (!ids.has(id)) this._views.delete(id);
+    }
+    return this._mapsCache;
   }
 
   _map() {
@@ -121,7 +136,9 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
   _write(change) {
     this._saveQueue = this._saveQueue.then(async () => {
       if (!game.user?.isGM) throw new Error("Only Game Masters can edit Scene Maps.");
-      const maps = this._maps();
+      // Writes use an independent copy so a failed save cannot mutate the
+      // cached read model used for rendering and pointer movement.
+      const maps = normalizeSceneMaps(game.settings.get(MODULE_ID, "sceneMaps"));
       change(maps);
       this._saving = true;
       try {
@@ -655,16 +672,25 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this._drag || ![0, 1].includes(event.button)) return;
     const handle = event.target.closest("[data-role='node-handle']");
     if (!handle && event.target.closest(".mg-map-node, button, input, select, .mg-map-empty")) return;
-    if (!this._map()) return;
+    const map = this._map();
+    if (!map) return;
     event.preventDefault();
     event.stopPropagation();
     const id = handle?.closest(".mg-map-node")?.dataset.nodeId;
-    const node = this._map().nodes.find((entry) => entry.id === id);
+    const node = map.nodes.find((entry) => entry.id === id);
+    const lines = this.element.querySelectorAll(".mg-map-links line");
     this._drag = {
       id, mapId: this.mapId, pointerId: event.pointerId,
       startX: event.clientX, startY: event.clientY,
       x: node?.x ?? this._view().x, y: node?.y ?? this._view().y,
-      moved: false
+      moved: false,
+      card: handle?.closest(".mg-map-node"),
+      lines: map.links.flatMap((link, index) => {
+        if (!lines[index]) return [];
+        return [["1", link.from], ["2", link.to]]
+          .filter(([, nodeId]) => nodeId === id)
+          .map(([suffix]) => ({ element: lines[index], suffix }));
+      })
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.currentTarget.classList.add("is-dragging");
@@ -682,25 +708,15 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
         x: Math.min(100000, Math.max(-100000, drag.x + dx / this._view().scale)),
         y: Math.min(100000, Math.max(-100000, drag.y + dy / this._view().scale))
       };
-      const card = Array.from(this.element.querySelectorAll(".mg-map-node"))
-        .find((element) => element.dataset.nodeId === drag.id);
+      const card = drag.card;
       if (card) {
         card.style.left = `${drag.position.x}px`;
         card.style.top = `${drag.position.y}px`;
       }
-      // Lines are cheap to update and stay attached while the card is moving.
-      const map = this._map();
-      const nodes = new Map(map.nodes.map((node) => [node.id, node]));
-      nodes.set(drag.id, { ...nodes.get(drag.id), ...drag.position });
-      this.element.querySelectorAll(".mg-map-links line").forEach((line, index) => {
-        const link = map.links[index];
-        if (!link) return;
-        for (const [suffix, id] of [["1", link.from], ["2", link.to]]) {
-          const node = nodes.get(id);
-          line.setAttribute(`x${suffix}`, node.x + NODE_WIDTH / 2);
-          line.setAttribute(`y${suffix}`, node.y + NODE_HEIGHT / 2);
-        }
-      });
+      for (const { element, suffix } of drag.lines) {
+        element.setAttribute(`x${suffix}`, drag.position.x + NODE_WIDTH / 2);
+        element.setAttribute(`y${suffix}`, drag.position.y + NODE_HEIGHT / 2);
+      }
     } else {
       Object.assign(this._view(), { x: drag.x + dx, y: drag.y + dy });
       this._applyView();
@@ -779,6 +795,12 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     for (const [hook, id] of this._hookIds) Hooks.off(hook, id);
     this._events?.abort();
     clearTimeout(this._clickTimer);
+    clearTimeout(this._refreshTimer);
+    this._drag = null;
+    this._views.clear();
+    this._mapsCache = null;
+    this._mapsSource = null;
+    this.gallery = null;
     if (sceneMapApp === this) sceneMapApp = null;
     super._onClose(options);
   }
