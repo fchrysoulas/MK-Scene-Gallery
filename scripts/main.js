@@ -2,6 +2,7 @@ import { MODULE_ID, migrateLegacySettings, registerSettings } from "./settings.j
 import { registerHbsHelpers } from "./hbsHelpers.js";
 import { MediaGalleryApp } from "./app.js";
 import { registerBackgroundTransitionHooks } from "./backgroundTransitions.js";
+import { activateSceneWithTransition, registerSceneTransitionHooks } from "./sceneTransitions.js";
 import { renderSceneMapToolbar } from "./sceneMapToolbar.js";
 
 const HUB_METADATA_FLAG = "mk-module-hub";
@@ -32,7 +33,8 @@ async function openSceneMaps({ mapId } = {}) {
 
 const API = Object.freeze({
   open: openGallery,
-  openSceneMap: openSceneMaps
+  openSceneMap: openSceneMaps,
+  activateScene: activateSceneWithTransition
 });
 
 function registerModuleHubIntegration(hub) {
@@ -82,6 +84,7 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", async () => {
   registerBackgroundTransitionHooks();
+  registerSceneTransitionHooks();
   await migrateLegacySettings();
   try {
     await renderSceneMapToolbar();

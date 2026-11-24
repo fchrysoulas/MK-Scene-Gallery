@@ -2,6 +2,11 @@ import {
   DEFAULT_BACKGROUND_TRANSITION_MS,
   MODULE_ID
 } from "./settings.js";
+import {
+  createTransitionFilter,
+  normalizeTransitionEffect,
+  setTransitionProgress
+} from "./transitionEffects.js";
 
 const SOCKET_EVENT = `module.${MODULE_ID}`;
 const REMOTE_TRANSITION_TIMEOUT_MS = 15000;
@@ -10,6 +15,10 @@ const transitionQueues = new Map();
 const remoteTransitions = new Map();
 const completedRemoteTransitions = new Set();
 let hooksRegistered = false;
+
+export function getBackgroundTransitionEffect() {
+  return normalizeTransitionEffect(game.settings.get(MODULE_ID, "backgroundTransitionEffect"));
+}
 
 export function getBackgroundTransitionDuration() {
   // Keep using the original storage key so existing client preferences survive
@@ -195,7 +204,10 @@ function placeAboveNativeBackground(primary, root) {
 function destroyOverlay(overlay) {
   if (!overlay?.root) return;
 
-  if (overlay.pinned) unpinTexture(overlay.path);
+  if (overlay.pinned) {
+    unpinTexture(overlay.path);
+    overlay.pinned = false;
+  }
   stopVideo(overlay.video);
 
   if (overlay.root.parent) overlay.root.parent.removeChild(overlay.root);
@@ -210,6 +222,8 @@ function destroyOverlay(overlay) {
       overlay.root.destroy({ children: true });
     }
   }
+  overlay.filter?.destroy();
+  overlay.filter = null;
 
   if (globalThis.canvas?.primary) globalThis.canvas.primary.renderDirty = true;
 }
@@ -297,7 +311,7 @@ function animateOverlay(overlay, duration, primary) {
 
       const elapsed = Math.max(0, timestamp - startTime);
       const progress = Math.min(1, elapsed / duration);
-      overlay.root.alpha = progress * progress * (3 - (2 * progress));
+      setTransitionProgress(overlay.root, overlay.filter, progress * progress * (3 - (2 * progress)));
       primary.renderDirty = true;
 
       if (progress < 1) nextAnimationFrame(step);
@@ -308,7 +322,8 @@ function animateOverlay(overlay, duration, primary) {
   });
 }
 
-async function prepareBackgroundTransition(document, path, duration) {
+async function prepareBackgroundTransition(document, path, duration, effect) {
+  if (effect === "none") return null;
   const primary = duration > 0 ? getActivePrimaryGroup(document) : null;
   if (!primary || !globalThis.PIXI) return null;
 
@@ -317,10 +332,17 @@ async function prepareBackgroundTransition(document, path, duration) {
     overlay = await createBackgroundOverlay(document, path, primary);
     if (!overlay) return null;
 
+    try {
+      overlay.filter = createTransitionFilter(effect);
+      if (overlay.filter) overlay.root.filters = [overlay.filter];
+    } catch (error) {
+      console.warn(`${MODULE_ID} | Could not create ${effect}; using Fade`, error);
+    }
+    setTransitionProgress(overlay.root, overlay.filter, 0);
     const completed = await animateOverlay(overlay, duration, primary);
     if (completed) return overlay;
   } catch (error) {
-    console.warn(`${MODULE_ID} | Could not prepare the background fade; updating immediately`, error);
+    console.warn(`${MODULE_ID} | Could not prepare the background transition; updating immediately`, error);
   }
 
   destroyOverlay(overlay);
@@ -331,9 +353,9 @@ export async function withBackgroundTransition(
   document,
   path,
   operation,
-  { duration = getBackgroundTransitionDuration() } = {}
+  { duration = getBackgroundTransitionDuration(), effect = getBackgroundTransitionEffect() } = {}
 ) {
-  const overlay = await prepareBackgroundTransition(document, path, duration);
+  const overlay = await prepareBackgroundTransition(document, path, duration, normalizeTransitionEffect(effect));
   try {
     return await operation();
   } finally {
@@ -371,21 +393,27 @@ function hasTransitionBypass(options) {
 
 function shouldTransition(document, changes, options) {
   if (hasTransitionBypass(options)) return false;
+  if (getBackgroundTransitionEffect() === "none") return false;
 
   const { changed, path } = readBackgroundSourceChange(changes);
   if (!changed || path === (String(document?.background?.src || "").trim() || null)) return false;
-  return getBackgroundTransitionDuration() > 0 && !!getActivePrimaryGroup(document);
+  const visible = !!getActivePrimaryGroup(document);
+  const broadcast = game.user?.isGM && game.socket && (visible || getOwningScene(document)?.active);
+  return (getBackgroundTransitionDuration() > 0 && visible) || !!broadcast;
 }
 
 function getDocumentKey(document) {
-  return `${document?.documentName || "Document"}.${document?.id || "unknown"}`;
+  return `${getOwningScene(document)?.id}.${document?.documentName || "Document"}.${document?.id || "unknown"}`;
 }
 
 function enqueueTransition(document, operation) {
   const key = getDocumentKey(document);
   const previous = transitionQueues.get(key) ?? Promise.resolve();
   const result = previous.then(operation, operation);
-  transitionQueues.set(key, result.catch(() => {}));
+  const settled = result.catch(() => {}).finally(() => {
+    if (transitionQueues.get(key) === settled) transitionQueues.delete(key);
+  });
+  transitionQueues.set(key, settled);
   return result;
 }
 
@@ -393,7 +421,7 @@ function createTransitionId() {
   return foundry.utils.randomID();
 }
 
-function emitTransitionStart(document, path, transitionId, duration) {
+function emitTransitionStart(document, path, transitionId, duration, effect) {
   const scene = getOwningScene(document);
   if (!game.socket || !scene?.id) return;
 
@@ -401,6 +429,7 @@ function emitTransitionStart(document, path, transitionId, duration) {
     type: "startBackgroundTransition",
     transitionId,
     duration,
+    effect,
     sceneId: scene.id,
     documentName: document.documentName,
     documentId: document.id,
@@ -417,6 +446,7 @@ export function updateBackgroundDocumentWithTransition(document, changes, option
 
   return enqueueTransition(document, async () => {
     const duration = getBackgroundTransitionDuration();
+    const effect = getBackgroundTransitionEffect();
     const transitionId = createTransitionId();
     const moduleOptions = {
       ...(options[MODULE_ID] ?? {}),
@@ -429,13 +459,18 @@ export function updateBackgroundDocumentWithTransition(document, changes, option
       [MODULE_ID]: moduleOptions
     };
 
-    emitTransitionStart(document, path, transitionId, duration);
-    return withBackgroundTransition(
-      document,
-      path,
-      () => document.update(changes, updateOptions),
-      { duration }
-    );
+    emitTransitionStart(document, path, transitionId, duration, effect);
+    try {
+      return await withBackgroundTransition(
+        document,
+        path,
+        () => document.update(changes, updateOptions),
+        { duration, effect }
+      );
+    } finally {
+      // Also release player overlays when the document update fails.
+      game.socket?.emit(SOCKET_EVENT, { type: "finishBackgroundTransition", transitionId });
+    }
   });
 }
 
@@ -487,6 +522,10 @@ function finishRemoteTransition(transitionId) {
 }
 
 async function startRemoteTransition(message) {
+  if (message?.type === "finishBackgroundTransition") {
+    if (typeof message.transitionId === "string") finishRemoteTransition(message.transitionId);
+    return;
+  }
   if (
     message?.type !== "startBackgroundTransition"
     || typeof message.transitionId !== "string"
@@ -498,9 +537,10 @@ async function startRemoteTransition(message) {
   const localDuration = getBackgroundTransitionDuration();
   if (!document || localDuration <= 0 || !getActivePrimaryGroup(document)) return;
 
-  const duration = Math.min(3000, Math.max(0, Number(message.duration) || localDuration));
+  const duration = localDuration;
+  const effect = normalizeTransitionEffect(message.effect);
   const path = String(message.path || "").trim() || null;
-  const overlay = await prepareBackgroundTransition(document, path, duration);
+  const overlay = await prepareBackgroundTransition(document, path, duration, effect);
   if (!overlay) return;
 
   if (completedRemoteTransitions.has(message.transitionId)) {
@@ -546,6 +586,8 @@ export function registerBackgroundTransitionHooks() {
   Hooks.on("updateLevel", finishTransitionFromUpdate);
   Hooks.on("canvasReady", clearRemoteTransitions);
   game.socket?.on(SOCKET_EVENT, (message) => {
-    void startRemoteTransition(message);
+    void startRemoteTransition(message).catch((error) => {
+      console.error(`${MODULE_ID} | Could not play a remote background transition`, error);
+    });
   });
 }

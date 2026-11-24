@@ -1,4 +1,26 @@
 /* MK Scene Gallery — dark glass ApplicationV2 skin */
+.mg-scene-transition {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 99;
+}
+
+.mg-toolbar-transition {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 1 180px;
+  min-width: 120px;
+}
+
+.mg-toolbar-transition select {
+  width: 100%;
+  min-width: 0;
+}
+
 #mk-scene-gallery-app,
 #mk-scene-gallery-image-preview,
 #mk-scene-gallery-image-details,
@@ -2873,7 +2895,7 @@
   height: auto;
   margin: 0;
   padding: 6px 8px;
-  border: 1px solid rgba(221, 168, 91, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 10px;
   background: rgba(12, 16, 25, 0.94);
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
@@ -2882,31 +2904,49 @@
   backdrop-filter: blur(12px);
   pointer-events: auto;
   font-size: 12px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
 .mg-floating-toolbar-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.mg-floating-map-picker { display: flex; align-items: center; gap: 8px; min-width: 0; color: #dda85b; }
-#mk-scene-gallery-toolbar select {
-  width: 200px;
-  max-width: 35vw;
-  min-width: 100px;
+.mg-floating-toolbar-grid {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 170px;
   height: 30px;
-  padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
-  background: #171e2a;
-  color: #f4f1eb;
-  font-size: 12px;
+  margin: 0;
+  color: #dda85b;
 }
+#mk-scene-gallery-toolbar input[type="range"] {
+  width: 140px;
+  max-width: 25vw;
+  min-width: 70px;
+  margin: 0;
+  accent-color: #dda85b;
+  cursor: ew-resize;
+}
+.mg-floating-grid-reading {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 48px;
+  color: #f4f1eb;
+  font-variant-numeric: tabular-nums;
+}
+.mg-floating-grid-reading small { color: #a6adbb; font-size: 10px; }
+.mg-floating-toolbar-grid:has(input:disabled) { opacity: 0.45; }
 #mk-scene-gallery-toolbar button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  width: auto;
+  width: 30px;
+  min-width: 30px;
   min-height: 30px;
   margin: 0;
-  padding: 4px 9px;
+  padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   background: #1b212f;
@@ -2915,11 +2955,11 @@
   cursor: pointer;
 }
 #mk-scene-gallery-toolbar button:hover { border-color: #dda85b; background: #362b1d; color: #f1c171; }
+#mk-scene-gallery-toolbar:focus-visible,
 #mk-scene-gallery-toolbar button:focus-visible,
-#mk-scene-gallery-toolbar select:focus-visible { outline: 2px solid #dda85b; outline-offset: 2px; }
+#mk-scene-gallery-toolbar input:focus-visible { outline: 2px solid #dda85b; outline-offset: 2px; }
 .mg-floating-toolbar-divider { height: 22px; border-left: 1px solid rgba(255, 255, 255, 0.15); }
 
-#mk-scene-gallery-toolbar .mg-floating-toolbar-handle { padding-inline: 6px; cursor: grab; touch-action: none; user-select: none; }
 #mk-scene-gallery-toolbar.is-dragging,
 #mk-scene-gallery-toolbar.is-dragging * { cursor: grabbing; user-select: none; }
 
@@ -3044,7 +3084,7 @@
 .mg-map-node {
   position: absolute;
   width: 180px;
-  height: 158px;
+  height: 188px;
   box-sizing: border-box;
   border: 1px solid var(--mg-border-strong);
   border-radius: 9px;
@@ -3079,8 +3119,9 @@
 .mg-map-wrap .mg-map-image > i { color: var(--mg-faint); font-size: 30px; }
 .mg-map-viewport.is-linking .mg-map-image { cursor: crosshair; }
 #mk-scene-gallery-scene-map.is-traveling .mg-map-image { cursor: progress; opacity: 0.6; }
-.mg-map-node footer { display: flex; align-items: center; justify-content: space-between; height: 30px; padding: 0 4px; }
+.mg-map-node footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; height: 60px; padding: 0 4px; }
 .mg-map-node footer button { min-height: 24px; padding: 2px 5px; border-color: transparent; background: transparent; font-size: 10px; }
+.mg-map-node footer .mg-map-save { flex-basis: 100%; color: var(--mg-accent-bright); }
 .mg-map-party {
   position: absolute;
   bottom: calc(100% + 7px);

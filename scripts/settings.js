@@ -1,3 +1,5 @@
+import { TRANSITION_EFFECTS } from "./transitionEffects.js";
+
 export const MODULE_ID = "mk-scene-gallery";
 export const LEGACY_MODULE_ID = "share-media-gallery";
 export const DEFAULT_PAGE_SIZE = 30;
@@ -161,9 +163,19 @@ export function registerSettings() {
     }
   });
 
+  game.settings.register(MODULE_ID, "backgroundTransitionEffect", {
+    name: "Scene transition effect",
+    hint: "Built-in Battle Transitions effects for background changes and Scene Map travel.",
+    scope: "world",
+    config: true,
+    type: String,
+    choices: TRANSITION_EFFECTS,
+    default: "fade"
+  });
+
   game.settings.register(MODULE_ID, "tokenLayerTransitionMs", {
-    name: "Scene background fade duration",
-    hint: "Fade duration in milliseconds between Scene backgrounds. Set to 0 to disable.",
+    name: "Scene transition duration",
+    hint: "Transition duration in milliseconds on this client. Set to 0 to disable effects locally.",
     scope: "client",
     config: true,
     type: Number,

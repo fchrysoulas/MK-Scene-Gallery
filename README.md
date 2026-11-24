@@ -64,6 +64,33 @@ the gallery directly.
 6. Click **Display** to apply the image and its saved Scene preset to the active
    Scene. Use **Remove scene image** to clear the background.
 
+### Scene transitions
+
+Choose an effect from the wand dropdown in the gallery toolbar or from **Module
+Settings > MK-Scene-Gallery > Scene transition effect**. Effects include Fade,
+directional wipes, split, alternating bars, clock, radial, diamond, wave, melt,
+pixelate, zoom, and spiral. **None** disables transitions for the world. The
+**Scene transition duration** setting applies to each client; set it to zero to
+disable effects on that client. Existing fade-duration preferences are retained.
+
+The selected effect applies to native background changes, including gallery
+Display and Scene Map image places. Traveling to a linked Foundry Scene through
+a Scene Map holds a snapshot of the old Scene while the next one loads, then
+reveals it using the same effect. Players follow the activated Scene and use
+their own transition duration. Other GMs keep their own viewed Scene.
+
+Macros can activate a Scene with the same transition:
+
+```js
+await game.modules.get("mk-scene-gallery").api.activateScene("your-scene-id");
+```
+
+This incorporates selected effects and snapshot techniques from
+[Battle Transitions by Unarekin](https://github.com/Unarekin/FoundryVTT-Battle-Transitions),
+adapted for native Foundry v13-v14 backgrounds without additional dependencies.
+The upstream sequence editor and sample macros are not included. Its MIT notice
+is preserved in [scripts/vendor/battle-transitions.LICENSE.txt](scripts/vendor/battle-transitions.LICENSE.txt).
+
 ### Virtual folders
 
 Use the **Create virtual folder** button beside **Virtual folders** in the
@@ -87,12 +114,18 @@ deleting a group keeps every file.
 ### Scene Maps
 
 GMs have an always-on-top toolbar near the top of the screen, even while the
-gallery and Scene Maps are closed. Select a map and click **Open**, or use
-**Gallery** to browse scene images. **MK Actors** opens the Actor gallery when
-that module is enabled. With no maps yet, **Open** lets you create the first one.
-Drag the grip at the left edge to move the toolbar. Its position is saved on
-this client and kept within the screen. You can also focus the grip and use
-arrow keys to move it, holding Shift for larger steps.
+gallery and Scene Maps are closed. Its icon buttons open **Scene Maps**, the
+**Scene Gallery**, and **MK Actors** when that module is enabled; hover over a
+button for its name. Scene Maps opens the last-used map and lets you select maps
+inside its window. With no maps yet, it lets you create the first one. The battle
+grid-size slider changes the selected/viewed Scene's grid size and preserves
+Ambient Light coverage, just like the gallery slider.
+Drag the toolbar's panel or edges to move it. Its position is saved on this
+client and kept within the screen. You can also focus the toolbar itself and
+use arrow keys to move it, holding Shift for larger steps. Buttons and the grid
+slider keep their normal controls.
+The hand cursor indicates draggable areas and changes to a grabbing hand while
+moving the toolbar.
 
 Open **Scene Maps** in the gallery toolbar and click **New map**. Name maps for
 different adventures, chapters, dungeons, or regions, then switch between them
@@ -126,6 +159,15 @@ Click its character-count button to inspect attachments or detach them. You can
 also select tokens on the Foundry canvas and click **Attach selected canvas
 tokens** in the Characters panel to save their appearance, state, and position.
 Repeated Actor drops add multiple copies, useful for groups of the same NPC.
+
+Click **Save** on a place to capture its Scene background (including placement),
+Scene dimensions, exact grid size, current view, and all actor tokens with their
+positions and state. Image places capture the selected/viewed Scene; linked
+Foundry Scene places capture their own Scene. **Update** replaces the saved
+snapshot with the current Scene, including additions and removals of characters.
+Each place keeps its own snapshot, even when places use the same image. Loading
+the place restores it. Saved canvas tokens become part of that place and swap
+out when another place is loaded on the same Scene.
 
 Loading a place through its image or **Group here** places its attached tokens.
 New Actors appear near the Scene center; attached canvas tokens keep their saved

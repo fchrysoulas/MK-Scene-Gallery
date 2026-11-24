@@ -1,5 +1,5 @@
 import { MODULE_ID } from "./settings.js";
-import { normalizeSceneMaps } from "./sceneMapData.js";
+import { applySceneGridSize, getSceneGridSliderData, getSelectedScene } from "./sceneGrid.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const ACTORS_MODULE_ID = "mk-actors";
@@ -38,28 +38,28 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
 
   constructor(options = {}) {
     super(options);
-    this._selectedMapId = game.settings.get(MODULE_ID, "lastSceneMap");
     const saved = game.settings.get(MODULE_ID, "sceneMapToolbarPosition");
     this._toolbarPosition = Number.isFinite(saved?.left) && Number.isFinite(saved?.top)
       ? { left: saved.left, top: saved.top } : null;
-    this._settingHook = Hooks.on("updateSetting", (setting) => {
-      if (setting.key === `${MODULE_ID}.lastSceneMap`) {
-        this._selectedMapId = game.settings.get(MODULE_ID, "lastSceneMap");
-      } else if (setting.key !== `${MODULE_ID}.sceneMaps`) return;
-      if (this._drag) this._renderPending = true;
-      else if (this.rendered) this.render({ force: false });
-    });
+    this._hookIds = [
+      ["updateSetting", Hooks.on("updateSetting", (setting) => {
+        if (setting.key === `${MODULE_ID}.gridSizeMax`) this._refreshGridControls();
+      })],
+      ["updateScene", Hooks.on("updateScene", (scene, changes) => {
+        if (scene.id !== getSelectedScene()?.id) return;
+        if (changes?.grid || Object.hasOwn(changes ?? {}, "grid.size")) this._refreshGridControls();
+      })],
+      ["canvasReady", Hooks.on("canvasReady", () => this._refreshGridControls())],
+      ["canvasTearDown", Hooks.on("canvasTearDown", () => this._refreshGridControls({ disabled: true }))]
+    ];
   }
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const maps = normalizeSceneMaps(game.settings.get(MODULE_ID, "sceneMaps"));
-    if (!maps.some((map) => map.id === this._selectedMapId)) this._selectedMapId = maps[0]?.id ?? "";
     const actors = game.modules.get(ACTORS_MODULE_ID);
     return {
       ...context,
-      hasMaps: maps.length > 0,
-      maps: maps.map((map) => ({ id: map.id, name: map.name, selected: map.id === this._selectedMapId })),
+      grid: getSceneGridSliderData(),
       hasActors: actors?.active === true && typeof actors.api?.open === "function"
     };
   }
@@ -70,12 +70,16 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
     this._events = new AbortController();
     const signal = this._events.signal;
     this.element.setAttribute("aria-label", "Scene Map tools");
-    this.element.querySelector("select")?.addEventListener("change", (event) => {
-      this._selectedMapId = event.target.value;
+    this.element.setAttribute("aria-description", "Drag the panel or its edges to move the toolbar. When focused, use arrow keys; hold Shift to move faster.");
+    this.element.title = "Drag the panel or its edges to move. Arrow keys move the focused toolbar; Shift moves faster.";
+    this.element.tabIndex = 0;
+    const slider = this.element.querySelector("[data-role='grid-size']");
+    slider?.addEventListener("input", (event) => {
+      this.element.querySelector("[data-role='grid-size-value']").textContent = event.currentTarget.value;
     }, { signal });
-    const handle = this.element.querySelector("[data-role='toolbar-handle']");
-    handle.addEventListener("pointerdown", (event) => this._startDrag(event), { signal });
-    handle.addEventListener("keydown", (event) => this._moveWithKeyboard(event), { signal });
+    slider?.addEventListener("change", (event) => void this._changeGridSize(event), { signal });
+    this.element.addEventListener("pointerdown", (event) => this._startDrag(event), { signal });
+    this.element.addEventListener("keydown", (event) => this._moveWithKeyboard(event), { signal });
     this.element.addEventListener("pointermove", (event) => this._moveDrag(event), { signal });
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) {
       this.element.addEventListener(type, (event) => this._finishDrag(event), { signal });
@@ -99,14 +103,15 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _startDrag(event) {
     if (event.button !== 0 || this._drag) return;
+    if (event.target.closest("button, input, select, textarea, a, [contenteditable], [role='button'], [role='slider']")) return;
     event.preventDefault();
     event.stopPropagation();
+    this.element.focus({ preventScroll: true });
     this._drag = {
       pointerId: event.pointerId, x: event.clientX, y: event.clientY,
       origin: { ...this._toolbarPosition }, moved: false
     };
     this.element.setPointerCapture(event.pointerId);
-    this.element.classList.add("is-dragging");
   }
 
   _moveDrag(event) {
@@ -115,7 +120,10 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
     const dx = event.clientX - drag.x;
     const dy = event.clientY - drag.y;
     if (!drag.moved && Math.hypot(dx, dy) < 3) return;
-    drag.moved = true;
+    if (!drag.moved) {
+      drag.moved = true;
+      this.element.classList.add("is-dragging");
+    }
     this._applyToolbarPosition({ left: drag.origin.left + dx, top: drag.origin.top + dy });
   }
 
@@ -127,13 +135,10 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
     if (this.element.hasPointerCapture(drag.pointerId)) this.element.releasePointerCapture(drag.pointerId);
     if (event.type === "pointercancel") this._applyToolbarPosition(drag.origin);
     else if (drag.moved) void this._saveToolbarPosition();
-    if (this._renderPending && this.rendered) {
-      this._renderPending = false;
-      this.render({ force: false });
-    }
   }
 
   _moveWithKeyboard(event) {
+    if (event.target !== this.element) return;
     const directions = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
     const direction = directions[event.key];
     if (!direction || this._drag) return;
@@ -157,8 +162,34 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   async _openMap() {
-    const mapId = this.element.querySelector("select")?.value || undefined;
-    await game.modules.get(MODULE_ID)?.api?.openSceneMap({ mapId });
+    await game.modules.get(MODULE_ID)?.api?.openSceneMap();
+  }
+
+  _refreshGridControls({ disabled = false } = {}) {
+    const root = this.element;
+    const slider = root?.querySelector("[data-role='grid-size']");
+    if (!slider) return;
+    const grid = getSceneGridSliderData();
+    slider.min = grid.min;
+    slider.max = grid.max;
+    slider.step = grid.step;
+    slider.value = grid.value;
+    slider.disabled = disabled || grid.disabled || !!this._gridChanging;
+    root.querySelector("[data-role='grid-size-value']").textContent = grid.label;
+    root.querySelector("[data-role='grid-size-control']").title = grid.title;
+  }
+
+  async _changeGridSize(event) {
+    const scene = getSelectedScene();
+    if (!scene || this._gridChanging) return;
+    this._gridChanging = true;
+    event.currentTarget.disabled = true;
+    try {
+      await applySceneGridSize(scene, event.currentTarget.value, { notifyOnSuccess: true });
+    } finally {
+      this._gridChanging = false;
+      this._refreshGridControls();
+    }
   }
 
   async _openGallery() {
@@ -177,7 +208,7 @@ export class SceneMapToolbar extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _onClose(options) {
     if (this._drag) this._finishDrag({ pointerId: this._drag.pointerId, type: "pointercancel" });
-    Hooks.off("updateSetting", this._settingHook);
+    for (const [name, id] of this._hookIds) Hooks.off(name, id);
     this._events?.abort();
     if (toolbar === this) toolbar = null;
     super._onClose(options);

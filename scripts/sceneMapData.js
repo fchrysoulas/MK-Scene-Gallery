@@ -1,3 +1,5 @@
+import { normalizeSceneMapState } from "./sceneMapState.js";
+
 // Scene Maps store Foundry data paths and Scene IDs, never operating-system paths.
 const coordinate = (value) => {
   const number = Number(value);
@@ -36,7 +38,7 @@ export function normalizeSceneMaps(value) {
       if (!path && !sceneId) return [];
       nodeIds.add(node.id);
       return [{ id: node.id, path, sceneId, x: coordinate(node.x), y: coordinate(node.y),
-        tokens: normalizeTokens(node.tokens) }];
+        tokens: normalizeTokens(node.tokens), sceneState: normalizeSceneMapState(node.sceneState) }];
     });
     const pairs = new Set();
     const links = (Array.isArray(map.links) ? map.links : []).flatMap((link) => {

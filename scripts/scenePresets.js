@@ -123,7 +123,7 @@ function parseLightSources(value) {
   }
 }
 
-export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}) {
+export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000, gridSizeStep = 25 } = {}) {
   const preset = rawPreset && typeof rawPreset === "object" && !Array.isArray(rawPreset)
     ? rawPreset
     : {};
@@ -136,7 +136,7 @@ export function normalizeScenePreset(rawPreset = {}, { gridSizeMax = 1000 } = {}
   return {
     gridSize: (() => {
       const value = clampOrNull(preset.gridSize, 50, gridSizeMax);
-      return value === null ? null : Math.round(value / 25) * 25;
+      return value === null ? null : Math.round(value / gridSizeStep) * gridSizeStep;
     })(),
     gridType: GRID_TYPES.some((option) => option.value === gridType)
       ? gridType
@@ -384,7 +384,7 @@ export function readScenePresetForm(
   }, { gridSizeMax });
 }
 
-export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
+export function captureScenePreset(scene, { gridSizeMax = 1000, gridSizeStep = 25 } = {}) {
   const isV14 = Number(game.release?.generation) >= 14;
   const levelColor = isV14 ? getSceneBackgroundDocument(scene)?.background?.color : null;
   const backgroundColor = isV14
@@ -424,7 +424,7 @@ export function captureScenePreset(scene, { gridSizeMax = 1000 } = {}) {
     initialY: currentView.y ?? initial.y,
     initialScale: currentView.scale ?? initial.scale,
     lightSources: captureSceneLightSources(scene)
-  }, { gridSizeMax });
+  }, { gridSizeMax, gridSizeStep });
 }
 
 async function replaceSceneLightSources(scene, lightSources) {
@@ -442,8 +442,10 @@ async function replaceSceneLightSources(scene, lightSources) {
   }
 }
 
-export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } = {}) {
-  const preset = normalizeScenePreset(rawPreset, { gridSizeMax });
+export async function applyScenePreset(scene, rawPreset, {
+  gridSizeMax = 1000, gridSizeStep = 25, updateOptions = {}
+} = {}) {
+  const preset = normalizeScenePreset(rawPreset, { gridSizeMax, gridSizeStep });
   const isV14 = Number(game.release?.generation) >= 14;
   const levelColorChanged = isV14 && preset.backgroundColor !== null;
   const backgroundDocument = levelColorChanged ? getSceneBackgroundDocument(scene) : null;
@@ -488,7 +490,7 @@ export async function applyScenePreset(scene, rawPreset, { gridSizeMax = 1000 } 
     && previousGridSize > 0
     && preset.gridSize !== previousGridSize;
 
-  if (Object.keys(update).length > 0) await scene.update(update);
+  if (Object.keys(update).length > 0) await scene.update(update, updateOptions);
   if (levelColorChanged) {
     await backgroundDocument.update({
       "background.color": Number.parseInt(preset.backgroundColor.slice(1), 16)

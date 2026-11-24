@@ -53,6 +53,11 @@
             {{#if missing}}<span class="mg-map-missing">Scene removed</span>{{/if}}
           </button>
           <footer>
+            <button type="button" data-action="save-node-scene" data-node-id="{{id}}" class="mg-map-save"
+              title="{{#if hasSavedScene}}Update{{else}}Save{{/if}} this place from {{#if isScene}}its linked Scene{{else}}the selected Scene{{/if}}: background, grid, view, and all actor tokens"
+              aria-label="{{#if hasSavedScene}}Update saved Scene for{{else}}Save Scene for{{/if}} {{label}}" {{#unless canSaveScene}}disabled{{/unless}}>
+              <i class="fas fa-floppy-disk" aria-hidden="true"></i> {{#if hasSavedScene}}Update{{else}}Save{{/if}}
+            </button>
             <button type="button" data-action="group-here" data-node-id="{{id}}" title="{{#if isScene}}Activate Scene: {{label}}{{else}}Display {{label}} on the selected Scene{{/if}} and move the group here" aria-label="Move group to {{label}}">
               <i class="fas fa-people-group" aria-hidden="true"></i> Group here
             </button>
@@ -78,6 +83,10 @@
           <button type="button" data-action="close-characters" title="Close Characters" aria-label="Close Characters"><i class="fas fa-xmark" aria-hidden="true"></i></button>
         </header>
         <p>Drop Actors here or onto this place. Characters appear when you load the place with its image or Group here button.</p>
+        <button type="button" data-action="save-node-scene" data-node-id="{{characterNode.id}}" {{#unless characterNode.canSaveScene}}disabled{{/unless}}>
+          <i class="fas fa-floppy-disk" aria-hidden="true"></i> {{#if characterNode.hasSavedScene}}Update saved Scene{{else}}Save Scene{{/if}}
+        </button>
+        <p>Save the background, grid, view, and every actor token with its position. Update replaces this place's saved characters with those currently on the Scene.</p>
         <button type="button" data-action="attach-selected-tokens"><i class="fas fa-users" aria-hidden="true"></i> Attach selected canvas tokens</button>
         <p>Canvas tokens keep their appearance and position. New Actors start near the Scene center. Repeated drops add extra copies.</p>
         <ul class="mg-map-character-list">

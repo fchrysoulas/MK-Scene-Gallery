@@ -1,5 +1,4 @@
 import {
-  DEFAULT_GRID_SIZE_MAX,
   DEFAULT_IMAGE_TITLE_FONT_SIZE,
   DEFAULT_PAGE_SIZE,
   MODULE_ID
@@ -10,6 +9,9 @@ import {
   removeSceneBackground,
   setSceneBackground
 } from "./sceneBackground.js";
+import { getBackgroundTransitionEffect } from "./backgroundTransitions.js";
+import { normalizeTransitionEffect, TRANSITION_EFFECTS } from "./transitionEffects.js";
+import { applySceneGridSize, getGridSizeMax, getSelectedScene } from "./sceneGrid.js";
 import {
   applyScenePreset,
   captureScenePreset,
@@ -303,18 +305,11 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   _getSelectedScene() {
-    return game.scenes?.viewed
-      ?? game.scenes?.current
-      ?? game.canvas?.scene
-      ?? globalThis.canvas?.scene
-      ?? game.scenes?.active
-      ?? null;
+    return getSelectedScene();
   }
 
   _getGridSizeMax() {
-    const configured = Number(game.settings.get(MODULE_ID, "gridSizeMax"));
-    if (!Number.isFinite(configured) || configured < 50) return DEFAULT_GRID_SIZE_MAX;
-    return Math.max(50, Math.round(configured / 25) * 25);
+    return getGridSizeMax();
   }
 
   _getImageTitleFontSize() {
@@ -1022,6 +1017,9 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
       baseDir,
       recursive,
       imageTitleFontSize: this._getImageTitleFontSize(),
+      transitionEffects: Object.entries(TRANSITION_EFFECTS).map(([value, label]) => ({
+        value, label, selected: value === getBackgroundTransitionEffect()
+      })),
       filter: this.filter,
       totalIndexed: this.total,
       totalFiltered: filtered.length,
@@ -1110,6 +1108,8 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     gridSizeSlider?.addEventListener("change", (event) => this._updateGridSize(event));
     root.querySelector("[data-role='lockview-anchor']")
       ?.addEventListener("change", (event) => this._anchorLockViewBounds(event));
+    root.querySelector("[data-role='transition-effect']")
+      ?.addEventListener("change", (event) => void this._changeTransitionEffect(event));
 
     this._bindThumbnailVideos(root);
 
@@ -1405,39 +1405,7 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
   }
 
   async _applySceneGridSize(scene, requested, { notifyOnSuccess = false } = {}) {
-    const requestedNumber = Number(requested);
-    if (!scene || !Number.isFinite(requestedNumber)) return false;
-
-    if (!(scene.isOwner ?? !!game.user?.isGM)) {
-      ui.notifications.error(`You cannot edit ${scene.name || "the selected Scene"}.`);
-      return false;
-    }
-
-    const normalized = normalizeScenePreset(
-      { gridSize: requestedNumber },
-      { gridSizeMax: this._getGridSizeMax() }
-    );
-    if (normalized.gridSize === Number(scene.grid?.size ?? scene.dimensions?.size)) {
-      return true;
-    }
-
-    try {
-      const result = await applyScenePreset(
-        scene,
-        normalized,
-        { gridSizeMax: this._getGridSizeMax() }
-      );
-      if (notifyOnSuccess) {
-        ui.notifications.info(
-          `Grid size changed to ${result.preset.gridSize} px. Ambient Light positions and pixel coverage were preserved.`
-        );
-      }
-      return true;
-    } catch (error) {
-      console.error(`${MODULE_ID} | Could not update Scene grid size`, error);
-      ui.notifications.error("Could not update the Scene grid size and Ambient Light radii.");
-      return false;
-    }
+    return applySceneGridSize(scene, requested, { notifyOnSuccess });
   }
 
   async _anchorLockViewBounds(event, trigger = event.currentTarget) {
@@ -1826,6 +1794,22 @@ export class MediaGalleryApp extends GalleryFoldersMixin(GalleryIndexingMixin(Ha
     }
 
     return saved;
+  }
+
+  async _changeTransitionEffect(event) {
+    const select = event.currentTarget;
+    const effect = normalizeTransitionEffect(select.value);
+    select.disabled = true;
+    try {
+      await game.settings.set(MODULE_ID, "backgroundTransitionEffect", effect);
+      ui.notifications.info(`Scene transition: ${TRANSITION_EFFECTS[effect]}.`);
+    } catch (error) {
+      console.error(`${MODULE_ID} | Could not save the Scene transition effect`, error);
+      select.value = getBackgroundTransitionEffect();
+      ui.notifications.error("Could not save the Scene transition effect.");
+    } finally {
+      select.disabled = false;
+    }
   }
 
   async _setSceneBackground(event, target = event.currentTarget) {

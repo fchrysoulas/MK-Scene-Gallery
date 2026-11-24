@@ -2,7 +2,19 @@
 
 All notable changes to MK-Scene-Gallery are documented here.
 
-## Unreleased
+## 0.15.0
+
+- Incorporated built-in Battle Transitions effects with a world-wide gallery
+  selector, per-client duration, player synchronization, and upstream MIT credit.
+- Added snapshot transitions for linked Foundry Scene travel in Scene Maps and
+  the macro API `api.activateScene(sceneId)`, without external dependencies.
+- Added Save/Update buttons to Scene Map places to capture and restore the native
+  background and placement, dimensions, exact grid size, view, and actor tokens
+  with their positions and state. Snapshots are stored separately for each place.
+- Added the battle grid-size slider to the floating toolbar, made its buttons
+  icon-only, and removed its Scene Map selector dropdown.
+- Move the floating toolbar by dragging its panel or edges, with a hand cursor
+  as the movement indicator and no dedicated drag button or border highlight.
 
 ## 0.14.0
 

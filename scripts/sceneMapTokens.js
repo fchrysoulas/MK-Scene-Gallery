@@ -15,6 +15,17 @@ export function getSceneMapTokenSource(token) {
   return token.flags?.[MODULE_ID]?.[TOKEN_FLAG];
 }
 
+export async function markSceneMapTokens(scene, mapId, nodeId, attachments) {
+  const updates = attachments.flatMap((attachment) => {
+    const token = Array.from(scene.tokens ?? []).find((entry) => entry.uuid === attachment.sourceTokenUuid);
+    return token ? [{
+      _id: token.id,
+      [`flags.${MODULE_ID}.${TOKEN_FLAG}`]: { mapId, nodeId, id: attachment.id }
+    }] : [];
+  });
+  if (updates.length) await scene.updateEmbeddedDocuments("Token", updates);
+}
+
 export async function makeSceneMapAttachment(data) {
   const document = await foundry.utils.fromUuid(data.uuid);
   const token = document?.documentName === "Token" ? document : document?.token;

@@ -1,17 +1,20 @@
 import { MODULE_ID } from "./settings.js";
 import { getMediaType } from "./fileIndex.js";
 import { getSceneBackground } from "./sceneBackground.js";
+import { withSceneTransition } from "./sceneTransitions.js";
 import { normalizeSceneMaps, removeSceneMapNode, toggleSceneMapLink } from "./sceneMapData.js";
+import { applySceneMapState, captureSceneMapState, restoreSceneMapView } from "./sceneMapState.js";
 import {
   cleanSceneMapToken,
   getSceneMapTokenSource,
   loadSceneMapTokens,
+  markSceneMapTokens,
   makeSceneMapAttachment
 } from "./sceneMapTokens.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 158;
+const NODE_HEIGHT = 188;
 const MEDIA_DRAG_TYPE = `application/x-${MODULE_ID}`;
 let sceneMapApp;
 
@@ -66,6 +69,7 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       "zoom-out": action("_zoomOut"),
       "visit-node": action("_visitNode"),
       "group-here": action("_groupHere"),
+      "save-node-scene": action("_saveNodeScene"),
       "node-characters": action("_showCharacters"),
       "close-characters": action("_hideCharacters"),
       "attach-selected-tokens": action("_attachSelectedTokens"),
@@ -302,7 +306,8 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   _nodeData(node, map) {
     const scene = node.sceneId ? game.scenes.get(node.sceneId) : null;
-    const path = node.sceneId ? getSceneBackground(scene)?.path ?? node.path : node.path;
+    const path = node.sceneState ? node.sceneState.background.src || ""
+      : node.sceneId ? getSceneBackground(scene)?.path ?? node.path : node.path;
     const metadata = game.settings.get(MODULE_ID, "imageMetadata")?.[path];
     const titles = game.settings.get(MODULE_ID, "imageTitles");
     let fileName = path.split("/").pop() || "Scene";
@@ -313,6 +318,8 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
       url: path ? this.gallery?._toServedUrl(path) ?? path : "",
       isVideo: getMediaType(path) === "video",
       party: node.id === map.partyNodeId,
+      hasSavedScene: !!node.sceneState,
+      canSaveScene: node.sceneId ? !!scene : !!this.gallery?._getSelectedScene(),
       tokenCount: node.tokens.length,
       linkSource: this._linkFrom === node.id
     };
@@ -393,9 +400,23 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
           return;
         }
         if (!await this._captureTokens(scene)) return;
-        await loadSceneMapTokens(scene, map.id, node);
-        await scene.activate();
-        await scene.view();
+        const loaded = await withSceneTransition(scene, async () => {
+          if (node.sceneState) {
+            await scene.activate();
+            await scene.view();
+            await applySceneMapState(scene, node.sceneState);
+          }
+          const latestNode = this._maps().find((entry) => entry.id === map.id)?.nodes.find((entry) => entry.id === id);
+          if (!latestNode) return false;
+          await loadSceneMapTokens(scene, map.id, latestNode);
+          if (!node.sceneState) {
+            await scene.activate();
+            await scene.view();
+          }
+          if (node.sceneState) await restoreSceneMapView(scene, node.sceneState);
+          return true;
+        });
+        if (!loaded) return;
       } else {
         scene = this.gallery?._getSelectedScene();
         if (!scene) {
@@ -403,12 +424,16 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
           return;
         }
         if (!await this._captureTokens(scene)) return;
-        const displayed = await this.gallery?._displayImage(node.path, scene);
-        if (!displayed) return;
+        if (node.sceneState) {
+          await applySceneMapState(scene, node.sceneState);
+          if (node.sceneState.background.src) await this.gallery?._recordRecentlyDisplayed(node.sceneState.background.src);
+        }
+        else if (!await this.gallery?._displayImage(node.path, scene)) return;
         const latestNode = this._maps().find((entry) => entry.id === map.id)?.nodes.find((entry) => entry.id === id);
         if (!latestNode) return;
         await loadSceneMapTokens(scene, map.id, latestNode);
       }
+      if (node.sceneState && !node.sceneId) await restoreSceneMapView(scene, node.sceneState);
       const saved = await this._editMap(map.id, (entry) => {
         if (entry.nodes.some((candidate) => candidate.id === id)) entry.partyNodeId = id;
       });
@@ -416,6 +441,50 @@ export class SceneMapApp extends HandlebarsApplicationMixin(ApplicationV2) {
     } finally {
       this._travelPending = false;
       this.element?.classList.remove("is-traveling");
+    }
+  }
+
+  async _saveNodeScene(target) {
+    if (this._suppressClick || this._travelPending) return;
+    await this._saveQueue;
+    if (this._travelPending) return;
+    const map = this._map();
+    const node = map?.nodes.find((entry) => entry.id === target.dataset.nodeId);
+    if (!node) return;
+    const scene = node.sceneId ? game.scenes.get(node.sceneId) : this.gallery?._getSelectedScene();
+    if (!scene) {
+      ui.notifications.warn("Open a Foundry Scene before saving this place.");
+      return;
+    }
+    if (!game.user?.isGM || !scene.isOwner) throw new Error("You cannot save this Scene.");
+    this._travelPending = true;
+    target.disabled = true;
+    try {
+      const sceneState = captureSceneMapState(scene);
+      const tokens = Array.from(scene.tokens ?? []).filter((token) => token.baseActor ?? token.actor);
+      const attachments = await Promise.all(tokens.map(async (token) => {
+        const attachment = await makeSceneMapAttachment({ uuid: token.uuid });
+        const source = getSceneMapTokenSource(token);
+        const existing = node.tokens.find((entry) => entry.sourceTokenUuid === token.uuid
+          || (source?.mapId === map.id && source?.nodeId === node.id && source?.id === entry.id));
+        if (existing) attachment.id = existing.id;
+        return attachment;
+      }));
+      const saved = await this._editMap(map.id, (entry) => {
+        const place = entry.nodes.find((candidate) => candidate.id === node.id);
+        if (!place) throw new Error("The place for this Scene was removed.");
+        place.sceneState = sceneState;
+        place.path = sceneState.background.src || place.path;
+        place.tokens = attachments;
+      });
+      if (!saved) return;
+      // Include original canvas tokens in place swapping, without creating duplicates.
+      await markSceneMapTokens(scene, map.id, node.id, attachments);
+      ui.notifications.info(`Scene saved: background, grid, view, and ${attachments.length} character${attachments.length === 1 ? "" : "s"}.`);
+    } finally {
+      this._travelPending = false;
+      target.disabled = false;
+      if (this.rendered) await this.render({ force: false });
     }
   }
 
